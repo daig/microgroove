@@ -1,6 +1,6 @@
 name:                microgroove
 version:             0.1.0.0
- synopsis:           Fast access extensible records
+synopsis:           Fast access extensible records
 -- description:
 homepage:            https://github.com/daig/microgroove
 license:             BSD3
@@ -17,7 +17,23 @@ library
   hs-source-dirs:      src
   exposed-modules:     Data.Microgroove
   build-depends:       base >= 4.7 && < 5
+                      ,vector
+                      ,primitive
   default-language:    Haskell2010
+  default-extensions: RankNTypes
+                     ,LambdaCase
+                     ,ConstraintKinds
+                     ,TypeFamilies
+                     ,FlexibleInstances
+                     ,ViewPatterns
+                     ,PatternSynonyms
+                     ,TypeOperators
+                     ,GADTs
+                     ,DataKinds
+                     ,PolyKinds
+                     ,KindSignatures
+                     ,TypeApplications
+                     ,ScopedTypeVariables
 
 source-repository head
   type:     git

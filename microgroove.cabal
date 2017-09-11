@@ -15,7 +15,7 @@ cabal-version:       >=1.10
 
 library
   hs-source-dirs:      src
-  exposed-modules:     Data.Microgroove
+  exposed-modules:     Data.Microgroove.Rec, Data.Microgroove.MRec
   build-depends:       base >= 4.7 && < 5
                       ,vector
                       ,primitive

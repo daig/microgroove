@@ -4,13 +4,15 @@
 {-# language UndecidableSuperClasses #-}
 {-# language UndecidableInstances #-}
 {-# language AllowAmbiguousTypes #-}
-module Data.Microgroove where
+module Data.Microgroove.Rec where
+import qualified Data.Microgroove.MRec as M
 import Data.Vector (Vector)
 import Data.Vector.Mutable (MVector)
 import qualified Data.Vector as V
 import qualified Data.Vector.Mutable as VM
 import Unsafe.Coerce (unsafeCoerce)
 import GHC.Exts (Any,Constraint)
+import Control.Monad ((<=<))
 import Control.Monad.ST
 import Control.Monad.Primitive (PrimMonad(..))
 
@@ -19,6 +21,11 @@ import Data.Proxy
 
 cast# :: forall b a. a -> b
 cast# = unsafeCoerce
+
+thaw :: PrimMonad m => Rec f us -> m (M.MRec (PrimState m) f us)
+thaw (Rec# v) = M.MRec# <$> V.thaw v
+freeze :: PrimMonad m => M.MRec (PrimState m) f us -> m (Rec f us)
+freeze (M.MRec# v) = Rec# <$> V.freeze v
 
 newtype Rec (f :: u -> *) (us :: [u]) = Rec# (V.Vector Any)
 data Rec' (f :: u -> *) (us :: [u]) where
@@ -86,7 +93,12 @@ checkIndex (Rec# (length -> n)) i | i < n = case someNatVal (fromIntegral i) of
 (!) :: Rec f us -> RIndex us u -> f u
 Rec# v ! RIndex# i = cast# $ v V.! i
 
+aa :: Rec Id '[Integer, Double, Int]
 aa = RCons (Id (1::Integer)) $ RCons (Id (0.1::Double)) $ RCons (Id (3::Int)) RNil
+bb = do
+  a <- thaw @IO aa
+  b <- M.cfmap @Show @(K String) (K . show) a
+  freeze b
 
 class (c x,cc x) => (c :**: cc) x
 instance (c x, cc x) => (c :**: cc) x
@@ -102,16 +114,17 @@ instance Show (Rec f '[]) where show RNil = "[]"
 instance (Show (f x), Show (Rec f xs)) => Show (Rec f (x ': xs)) where
   show (RCons a xs) = show a ++ " : " ++ show xs
 
+newtype K a b = K a deriving Show
 {-rmap :: (forall x. f x -> g x) -> Rec f xs -> Rec g xs-}
 {-rmap f (Rec# v) = -}
 
-cmap :: forall (c :: * -> Constraint) f g xs. All c xs
-     => (forall x. c x => f x -> g x) -> Rec f xs -> Rec g xs
-cmap f = \case
-  RNil -> RNil
-  RCons x xs -> RCons (f x) (cmap @c f xs)
-cfmap :: forall (c :: * -> Constraint) f g xs. AllF c f xs
-     => (forall x. c (f x) => f x -> g x) -> Rec f xs -> Rec g xs
-cfmap f = \case
-  RNil -> RNil
-  RCons x xs -> RCons (f x) (cfmap @c f xs)
+{-cmap :: forall (c :: * -> Constraint) f g xs. All c xs-}
+     {-=> (forall x. c x => f x -> g x) -> Rec f xs -> Rec g xs-}
+{-cmap f = \case-}
+  {-RNil -> RNil-}
+  {-RCons x xs -> RCons (f x) (cmap @c f xs)-}
+{-cfmap :: forall (c :: * -> Constraint) f g xs. AllF c f xs-}
+     {-=> (forall x. c (f x) => f x -> g x) -> Rec f xs -> Rec g xs-}
+{-cfmap f = freeze . M.cfmap @c f <=< thaw-}
+
+

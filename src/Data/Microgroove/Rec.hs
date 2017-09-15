@@ -1,26 +1,22 @@
 {-# language MagicHash #-}
-{-# language MultiParamTypeClasses #-}
 {-# language FlexibleContexts #-}
-{-# language UndecidableSuperClasses #-}
-{-# language UndecidableInstances #-}
 {-# language AllowAmbiguousTypes #-}
 module Data.Microgroove.Rec where
 import qualified Data.Microgroove.MRec as M
+import Data.Microgroove.Lib
+import Data.Microgroove.TypeLevel
+
 import Data.Vector (Vector)
 import Data.Vector.Mutable (MVector)
 import qualified Data.Vector as V
 import qualified Data.Vector.Mutable as VM
-import Unsafe.Coerce (unsafeCoerce)
-import GHC.Exts (Any,Constraint)
+import GHC.Exts (Any)
 import Control.Monad ((<=<))
 import Control.Monad.ST
 import Control.Monad.Primitive (PrimMonad(..))
-
 import GHC.TypeLits
-import Data.Proxy
 
-cast# :: forall b a. a -> b
-cast# = unsafeCoerce
+import Data.Proxy
 
 thaw :: PrimMonad m => Rec f us -> m (M.MRec (PrimState m) f us)
 thaw (Rec# v) = M.MRec# <$> V.thaw v
@@ -47,17 +43,10 @@ pattern RNil :: () => (us ~ '[]) => Rec f us
 pattern RNil <- (upRec -> RNil') where
   RNil = Rec# V.empty
 
-newtype Id a = Id a deriving Show
-instance Functor Id where fmap f (Id a) = Id (f a)
 {-pattern RCons :: () => (us' ~ (u ': us)) => f u -> Rec f us -> Rec f us'-}
 pattern RCons :: () => (us' ~ (u ': us)) => f u -> Rec f us -> Rec f us'
 pattern RCons x xs <- (upRec -> RCons' x xs) where
   RCons x (Rec# xs) = Rec# (V.cons (cast# x) xs)
-
-
-type family ((xs :: [u]) !! (n :: Nat)) where
-  (x ': _) !! 0 = x
-  (_ ': xs) !! n = xs !! (n-1)
 
 newtype RIndex (xs :: [u]) (x :: u) = RIndex# Int deriving Show
 data RIndex' xs x where
@@ -73,15 +62,10 @@ pattern RS :: RIndex (xs :: [u]) (x :: u) -> RIndex (y ': xs) x
 pattern RS i <- (upRIndex -> RS' i) where
   RS (RIndex# i) = RIndex# (1+i)
 
-type family Length (xs :: [u]) :: Nat where
-  Length '[] = 0
-  Length (_ ': xs) = 1 + Length xs
   
 mkIndex :: forall n xs . (KnownNat n, n <= Length xs - 1) => RIndex xs (xs !! n)
 mkIndex = RIndex# $ fromInteger $ natVal (Proxy @n) 
 
-data Some f = forall x. Some (f x)
-data MaybeSome f = forall x. JustSome (f x) | None
 
 index :: forall n f xs. KnownNat n => Rec f xs -> f (xs !! n)
 index (Rec# v) = cast# $ v V.! fromInteger (natVal (Proxy @n))
@@ -100,21 +84,12 @@ bb = do
   b <- M.cfmap @Show @(K String) (K . show) a
   freeze b
 
-class (c x,cc x) => (c :**: cc) x
-instance (c x, cc x) => (c :**: cc) x
 
-type family AllF (c :: * -> Constraint) (f :: u -> *) (xs :: [u]) :: Constraint where
-  AllF c f '[] = ()
-  AllF c f (x ': xs) = (c (f x),AllF c f xs)
-type family All (c :: u -> Constraint) (xs :: [u]) :: Constraint where
-  All c '[] = ()
-  All c (x ': xs) = (c x,All c xs)
 
 instance Show (Rec f '[]) where show RNil = "[]"
 instance (Show (f x), Show (Rec f xs)) => Show (Rec f (x ': xs)) where
   show (RCons a xs) = show a ++ " : " ++ show xs
 
-newtype K a b = K a deriving Show
 {-rmap :: (forall x. f x -> g x) -> Rec f xs -> Rec g xs-}
 {-rmap f (Rec# v) = -}
 

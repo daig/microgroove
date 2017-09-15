@@ -5,11 +5,13 @@
 {-# language UndecidableInstances #-}
 {-# language AllowAmbiguousTypes #-}
 module Data.Microgroove.MRec where
+import Data.Microgroove.TypeLevel
+import Data.Microgroove.Lib
+
 import Data.Vector (Vector)
 import Data.Vector.Mutable (MVector)
 import qualified Data.Vector as V
 import qualified Data.Vector.Mutable as VM
-import Unsafe.Coerce (unsafeCoerce)
 import GHC.Exts (Any,Constraint)
 import Control.Monad.ST
 import Control.Monad.Primitive (PrimMonad(..))
@@ -17,12 +19,6 @@ import Control.Monad.Primitive (PrimMonad(..))
 import GHC.TypeLits
 import Data.Proxy
 
-cast# :: forall b a. a -> b
-cast# = unsafeCoerce
-castf# :: forall g f x. f x -> g x
-castf# = unsafeCoerce
-overcast# :: forall b a. (b -> b) -> a -> a
-overcast# = unsafeCoerce
 
 newtype MRec s (f :: u -> *) (us :: [u]) = MRec# (MVector s Any)
 data MRec' s (f :: u -> *) (us :: [u]) where
@@ -93,9 +89,9 @@ pattern MRCons x xs <- (upMRec -> MRCons' x xs)
 {-class (c x,cc x) => (c :**: cc) x-}
 {-instance (c x, cc x) => (c :**: cc) x-}
 
-type family AllF (c :: * -> Constraint) (f :: u -> *) (xs :: [u]) :: Constraint where
-  AllF c f '[] = ()
-  AllF c f (x ': xs) = (Head (x ': xs) ~ x, Tail (x ': xs) ~ xs, c (f x),AllF c f xs)
+{-type family AllF (c :: * -> Constraint) (f :: u -> *) (xs :: [u]) :: Constraint where-}
+  {-AllF c f '[] = ()-}
+  {-AllF c f (x ': xs) = (Head (x ': xs) ~ x, Tail (x ': xs) ~ xs, c (f x),AllF c f xs)-}
 {-type family All (c :: u -> Constraint) (xs :: [u]) :: Constraint where-}
   {-All c '[] = ()-}
   {-All c (x ': xs) = (c x,All c xs)-}

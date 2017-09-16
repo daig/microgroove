@@ -1,18 +1,23 @@
 {-# language MagicHash #-}
 {-# language FlexibleContexts #-}
 {-# language AllowAmbiguousTypes #-}
-module Data.Microgroove.Rec where
+module Data.Microgroove.Rec
+  (Rec(Rec#,RNil,RCons), MRec(..)
+  ,RIndex, mkIndex, index, (!), checkIndex, checkIndex'
+  ,splitCons, rappend, rmap, crmap
+  ,toVector, ctoVector
+  ,fromVectorN, fromVector, replicate
+  ,thaw, thaw#, freeze, freeze#
+  ) where
 import Prelude hiding (replicate)
+import Data.Microgroove.MRec (MRec(..))
 import qualified Data.Microgroove.MRec as M
 import Data.Microgroove.Lib
 import Data.Microgroove.TypeLevel
 
 import Data.Vector (Vector)
-import Data.Vector.Mutable (MVector)
 import qualified Data.Vector as V
-import qualified Data.Vector.Mutable as VM
 import GHC.Exts (Any)
-import Control.Monad ((<=<))
 import Control.Monad.ST
 import Control.Monad.Primitive (PrimMonad(..))
 import GHC.TypeLits
@@ -21,25 +26,25 @@ import Data.Proxy
 
 -- | Copy a record into a fresh mutable record
 -- O(n)
-thaw :: PrimMonad m => Rec f us -> m (M.MRec (PrimState m) f us)
-thaw (Rec# v) = M.MRec# <$> V.thaw v
+thaw :: PrimMonad m => Rec f us -> m (MRec (PrimState m) f us)
+thaw (Rec# v) = MRec# <$> V.thaw v
 -- | unsafely thaw a record. The original record should no longer be used, but this is not checked
 -- O(1)
-thaw# :: PrimMonad m => Rec f us -> m (M.MRec (PrimState m) f us)
-thaw# (Rec# v) = M.MRec# <$> V.unsafeThaw v
+thaw# :: PrimMonad m => Rec f us -> m (MRec (PrimState m) f us)
+thaw# (Rec# v) = MRec# <$> V.unsafeThaw v
 -- | Copy a mutable record into a fresh record
 -- O(n)
-freeze :: PrimMonad m => M.MRec (PrimState m) f us -> m (Rec f us)
-freeze (M.MRec# v) = Rec# <$> V.freeze v
+freeze :: PrimMonad m => MRec (PrimState m) f us -> m (Rec f us)
+freeze (MRec# v) = Rec# <$> V.freeze v
 -- | Unsafely freeze a mutable record. The original record should no longer be modified, but this is not checked
 -- O(1)
-freeze# :: PrimMonad m => M.MRec (PrimState m) f us -> m (Rec f us)
-freeze# (M.MRec# v) = Rec# <$> V.unsafeFreeze v
+freeze# :: PrimMonad m => MRec (PrimState m) f us -> m (Rec f us)
+freeze# (MRec# v) = Rec# <$> V.unsafeFreeze v
 
 -- | A heterogeneous record represented by an untyped vector
 newtype Rec (f :: u -> *) (us :: [u]) = Rec# (V.Vector Any)
 -- | A dynamically shaped record, with elements satisfying some constraint
-data SomeRec c f = forall us. AllF c f us => SomeRec (Rec f us)
+{-data SomeRec c f = forall us. AllF c f us => SomeRec (Rec f us)-}
 
 -- | An intermediate type to deconstruct an @Rec@ into head normal form
 data Rec' (f :: u -> *) (us :: [u]) where
@@ -55,9 +60,9 @@ splitCons (Rec# v) = (cast# $ V.head v, Rec# $ V.tail v)
 -- | Pattern match the head of a record that is statically known to be nonempty
 -- Or prepend an element to a record
 -- Matching is O(1), prepending is O(n)
-pattern RCons# :: f x -> Rec f xs -> Rec f (x ': xs)
-pattern RCons# x xs <- (( \ (Rec# v) -> (cast# $ V.head v, Rec# $ V.tail v)) -> (x,xs)) where
-  RCons# x (Rec# xs) = Rec# (V.cons (cast# x) xs)
+{-pattern RCons# :: f x -> Rec f xs -> Rec f (x ': xs)-}
+{-pattern RCons# x xs <- (( \ (Rec# v) -> (cast# $ V.head v, Rec# $ V.tail v)) -> (x,xs)) where-}
+  {-RCons# x (Rec# xs) = Rec# (V.cons (cast# x) xs)-}
 
 -- | Convert a Rec to head normal form,
 -- refining the type to distinguish empty from nonempty records
@@ -111,14 +116,18 @@ index (Rec# v) = cast# $ v V.! fromInteger (natVal (Proxy @n))
 checkIndex :: forall (xs :: [u]) f. KnownNat (Length xs) => Rec f xs -> Int -> MaybeSome (RIndex xs)
 checkIndex (Rec# (length -> n)) i | i < n = case someNatVal (fromIntegral i) of
   Just (SomeNat (Proxy :: Proxy n)) -> JustSome $ RIndex# @u @xs @(xs !! n) i
+  Nothing -> error "Impossible! Negative Vector.length in checkIndex"
+checkIndex _ _ = None
 
 -- | Prepare a dynamically known index
 -- O(n)
 checkIndex' :: forall (xs :: [u]) f. Rec f xs -> Int -> MaybeSome (RIndex xs)
+checkIndex' RNil _ = None
 checkIndex' (RCons (_::f x) _) 0 = JustSome (RZ @u @x)
 checkIndex' (RCons _ xs) n = case checkIndex' xs (n-1) of
   None -> None
   JustSome i -> JustSome $ RS i
+checkIndex' _ _ = error "Impossible! RNil and RCons inexhaustive in checkIndex'"
   
 
 -- | Index into a record with a prepared index
@@ -126,11 +135,14 @@ checkIndex' (RCons _ xs) n = case checkIndex' xs (n-1) of
 (!) :: Rec f us -> RIndex us u -> f u
 Rec# v ! RIndex# i = cast# $ v V.! i
 
-instance Show (Rec f '[]) where show RNil = "[]"
+instance Show (Rec f '[]) where
+  show RNil = "[]"
+  show _ = error "Impossible! RNil inexhaustive in show @(Rec f '[])"
 instance (Show (f x), Show (Rec f xs)) => Show (Rec f (x ': xs)) where
   show (RCons a xs) = show a ++ " : " ++ show xs
+  show _ = error "Impossible! RCons inexhaustive in show @(Rec f (x ': xs))"
 
--- Append two records
+-- | Append two records
 -- O(n+m)
 rappend :: Rec f as -> Rec f bs -> Rec f (as ++ bs)
 rappend (Rec# as) (Rec# bs) = Rec# $ as V.++ bs
@@ -143,7 +155,7 @@ rmap f r = runST $ freeze# =<< M.rmap f =<< thaw r
 -- | Transform a record in by mapping a natural tranformation that can make use of the provided constraint.
 -- Ex: `crmap @Show (K . show) :: (Rec f xs) -> (MRec (K String) xs)`
 -- O(n)
-crmap :: forall c g m f xs. AllF c f xs
+crmap :: forall c g f xs. AllF c f xs
       => (forall x. c (f x) => f x -> g x) -> Rec f xs -> Rec g xs
 crmap f r = runST $ freeze# =<< M.crmap @c f =<< thaw r
 
@@ -154,7 +166,7 @@ toVector f r = runST $ V.unsafeFreeze =<< M.toMVector f =<< thaw r
 
 -- | Convert a record to a vector by mapping to a homogeneous type, making use of provided constraint
 -- O(n)
-ctoVector :: forall c r m f xs. AllF c f xs
+ctoVector :: forall c r f xs. AllF c f xs
          => (forall x. c (f x) => f x -> r) -> Rec f xs -> Vector r
 ctoVector f r = runST $ V.unsafeFreeze =<< M.ctoMVector @c f =<< thaw r
 

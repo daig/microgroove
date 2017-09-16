@@ -4,20 +4,18 @@
 {-# language UndecidableSuperClasses #-}
 {-# language UndecidableInstances #-}
 {-# language AllowAmbiguousTypes #-}
-module Data.Microgroove.MRec where
+module Data.Microgroove.MRec
+  (MRec(MRec#,MRNil,MRCons)
+  ,rmap, crmap
+  ,toMVector, ctoMVector
+  ) where
 import Data.Microgroove.TypeLevel
 import Data.Microgroove.Lib
 
-import Data.Vector (Vector)
 import Data.Vector.Mutable (MVector)
-import qualified Data.Vector as V
 import qualified Data.Vector.Mutable as VM
 import GHC.Exts (Any,Constraint)
-import Control.Monad.ST
 import Control.Monad.Primitive (PrimMonad(..))
-
-import GHC.TypeLits
-import Data.Proxy
 
 
 -- | A mutable heterogeneous record represented by an untyped mutable vector
@@ -30,8 +28,8 @@ data MRec' s (f :: u -> *) (us :: [u]) where
 -- | Split a mutable record into a head vector of length one, and the remaining record
 -- must be statically known to be nonempty
 -- O(1)
-splitCons# :: MRec s f (x ': xs) -> (MVector s (f x),MRec s f xs)
-splitCons# (MRec# v) = (cast# $ VM.take 1 v, MRec# $ VM.tail v)
+{-splitCons# :: MRec s f (x ': xs) -> (MVector s (f x),MRec s f xs)-}
+{-splitCons# (MRec# v) = (cast# $ VM.take 1 v, MRec# $ VM.tail v)-}
 
 -- | Convert an MRec to head normal form,
 -- refining the type to distinguish empty from nonempty records
@@ -56,8 +54,9 @@ rmap :: forall g m f xs. PrimMonad m => (forall x. f x -> g x) -> MRec (PrimStat
 rmap f xs = cast# xs <$ go xs where
   go :: MRec (PrimState m) f as -> m ()
   go = \case
-    x@MRNil -> pure ()
-    MRCons x xs -> VM.modify x (castf# @f . f) 0 >> go xs
+    MRNil -> pure ()
+    MRCons x xs' -> VM.modify x (castf# @f . f) 0 >> go xs'
+    _ -> error "impossible! MRNil and MRCons were inexhaustive in rmap"
 
 -- | Modify a mutable record in place by mapping a natural tranformation that can make use of the provided constraint.
 -- Ex: `crmap @Show (K . show) :: (MRec s f xs) -> ST s (MRec s (K String) xs)`
@@ -67,8 +66,9 @@ crmap :: forall (c :: * -> Constraint) g m f xs. (AllF c f xs, PrimMonad m)
 crmap f xs = cast# xs <$ go xs where
   go :: forall as. (AllF c f as) => MRec (PrimState m) f as -> m ()
   go = \case
-    x@MRNil -> pure ()
-    MRCons x xs -> VM.modify x (castf# @f . f) 0 >> go xs
+    MRNil -> pure ()
+    MRCons x xs' -> VM.modify x (castf# @f . f) 0 >> go xs'
+    _ -> error "impossible! MRNil and MRCons were inexhaustive in crmap"
 
 -- | Convert a mutable record to a mutable vector by mapping to a homogeneous type
 -- O(n)
@@ -77,8 +77,9 @@ toMVector :: forall r m f xs. PrimMonad m
 toMVector f xs = cast# xs <$ go xs where
   go :: MRec (PrimState m) f as -> m ()
   go = \case
-    x@MRNil -> pure ()
-    MRCons x xs -> VM.modify x (cast# . f) 0 >> go xs
+    MRNil -> pure ()
+    MRCons x xs' -> VM.modify x (cast# . f) 0 >> go xs'
+    _ -> error "impossible! MRNil and MRCons were inexhaustive in toMVector"
 
 -- | Convert a mutable record to a mutable vector by mapping to a homogeneous type, making use of provided constraint
 -- O(n)
@@ -87,5 +88,6 @@ ctoMVector :: forall (c :: * -> Constraint) r m f xs. (AllF c f xs, PrimMonad m)
 ctoMVector f xs = cast# xs <$ go xs where
   go :: forall as. (AllF c f as) => MRec (PrimState m) f as -> m ()
   go = \case
-    x@MRNil -> pure ()
-    MRCons x xs -> VM.modify x (cast# . f) 0 >> go xs
+    MRNil -> pure ()
+    MRCons x xs' -> VM.modify x (cast# . f) 0 >> go xs'
+    _ -> error "impossible! MRNil and MRCons were inexhaustive in ctoMVector"

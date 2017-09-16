@@ -9,6 +9,7 @@ import GHC.TypeLits
 import Data.Proxy
 
 
+-- | Index into a type level list
 type family ((xs :: [u]) !! (n :: Nat)) where
   (x ': _) !! 0 = x
   (_ ': xs) !! n = xs !! (n-1)
@@ -17,30 +18,29 @@ type family Length (xs :: [u]) :: Nat where
   Length '[] = 0
   Length (_ ': xs) = 1 + Length xs
 
+-- | @AllF c f xs@ ensures that constraint @c (f x)@ holds for all @x@ in @xs@
 type family AllF (c :: * -> Constraint) (f :: u -> *) (xs :: [u]) :: Constraint where
   AllF c f '[] = ()
   AllF c f (x ': xs) = (c (f x),AllF c f xs)
-class AllF c f xs => AllF' c f xs 
-instance AllF c f xs => AllF' c f xs 
 
+-- | Append type level lists
 type family (as :: [k]) ++ (bs :: [k]) where
   '[] ++ bs = bs
   (a ': as) ++ bs = a ': (as ++ bs)
 
-type family Head (xs :: [u]) where Head (x ': _) = x
-type family Tail (xs :: [u]) where Tail (_ ': xs) = xs
+-- | Extend a type @x@ into a type level list @xs@ of length @n@
+type family Replicate (n :: Nat) (x :: u) :: [u] where
+  Replicate 0 x = '[]
+  Replicate n x = x ': Replicate (n-1) x
 
+-- | Inductive Natural Numbers
 data Nat' = Z | S Nat'
+-- | An injective form of @Replicate@ using inductive @Nat'@ rather than builtins
 type family Replicate' (n :: Nat') (x :: u) = xs | xs -> n where
   Replicate' Z _ = '[]
   Replicate' (S n) x = x ': Replicate' n x
   
-type family Replicate (n :: Nat) (x :: u) :: [u] where
-  Replicate 0 x = '[]
-  Replicate n x = x ': Replicate (n-1) x
-type family ReplicateC n (c :: Constraint) :: Constraint where
-  ReplicateC 0 _ = ()
-  ReplicateC n c = (c,ReplicateC (n-1) c)
-
+-- | The Existential Type @Some f@ is some @f x@ where @x@ is known at runtime
 data Some f = forall x. Some (f x)
+-- | Avoids one indirection compared with @Maybe (Some f)@
 data MaybeSome f = forall x. JustSome (f x) | None

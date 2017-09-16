@@ -2,6 +2,7 @@
 {-# language FlexibleContexts #-}
 {-# language AllowAmbiguousTypes #-}
 module Data.Microgroove.Rec where
+import Prelude hiding (replicate)
 import qualified Data.Microgroove.MRec as M
 import Data.Microgroove.Lib
 import Data.Microgroove.TypeLevel
@@ -47,7 +48,6 @@ pattern RNil :: () => (us ~ '[]) => Rec f us
 pattern RNil <- (upRec -> RNil') where
   RNil = Rec# V.empty
 
-{-pattern RCons :: () => (us' ~ (u ': us)) => f u -> Rec f us -> Rec f us'-}
 pattern RCons :: () => (us' ~ (u ': us)) => f u -> Rec f us -> Rec f us'
 pattern RCons x xs <- (upRec -> RCons' x xs) where
   RCons x (Rec# xs) = Rec# (V.cons (cast# x) xs)
@@ -81,15 +81,6 @@ checkIndex (Rec# (length -> n)) i | i < n = case someNatVal (fromIntegral i) of
 (!) :: Rec f us -> RIndex us u -> f u
 Rec# v ! RIndex# i = cast# $ v V.! i
 
-aa :: Rec Id '[Integer, Double, Int]
-aa = RCons (Id (1::Integer)) $ RCons (Id (0.1::Double)) $ RCons (Id (3::Int)) RNil
-bb = do
-  a <- thaw @IO aa
-  b <- M.crmap @Show @(K String) (K . show) a
-  freeze b
-
-
-
 instance Show (Rec f '[]) where show RNil = "[]"
 instance (Show (f x), Show (Rec f xs)) => Show (Rec f (x ': xs)) where
   show (RCons a xs) = show a ++ " : " ++ show xs
@@ -104,9 +95,23 @@ crmap :: forall c g m f xs. AllF c f xs
       => (forall x. c (f x) => f x -> g x) -> Rec f xs -> Rec g xs
 crmap f r = runST $ freeze# =<< M.crmap @c f =<< thaw r
 
-fromRec :: (forall x. f x -> r) -> Rec f xs -> Vector r
-fromRec f r = runST $ V.unsafeFreeze =<< M.fromMRec f =<< thaw r
+toVector :: (forall x. f x -> r) -> Rec f xs -> Vector r
+toVector f r = runST $ V.unsafeFreeze =<< M.toMVector f =<< thaw r
 
-cfromRec :: forall c r m f xs. AllF c f xs
+ctoVector :: forall c r m f xs. AllF c f xs
          => (forall x. c (f x) => f x -> r) -> Rec f xs -> Vector r
-cfromRec f r = runST $ V.unsafeFreeze =<< M.cfromMRec @c f =<< thaw r
+ctoVector f r = runST $ V.unsafeFreeze =<< M.ctoMVector @c f =<< thaw r
+
+replicate :: forall n f x. KnownNat n => f x -> Rec f (Replicate n x)
+replicate = Rec# . mapCast# @Any . V.replicate (fromInteger $ natVal (Proxy @n))
+fromVectorN :: forall n f x. KnownNat n => Vector (f x) -> Maybe (Rec f (Replicate n x))
+fromVectorN v =
+  let
+    n = fromInteger $ natVal (Proxy @n)
+  in
+    if n <= V.length v then Just . Rec# . mapCast# @Any $ V.take n v else Nothing
+fromVector :: forall f (x :: u). Vector (f x) -> Some (Rec f)
+fromVector v = case someNatVal (fromIntegral $ V.length v) of
+  Nothing -> error "fromVector: impossible! Negative vector length"
+  Just (SomeNat (Proxy :: Proxy n))
+    -> Some $ Rec# @u @f @(Replicate n x) $ mapCast# @Any v

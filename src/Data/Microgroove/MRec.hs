@@ -8,8 +8,9 @@ module Data.Microgroove.MRec
   (MRec(MRec#,MRNil,MRCons)
   ,rmap, crmap
   ,toMVector, ctoMVector
+  ,module X
   ) where
-import Data.Microgroove.TypeLevel
+import Data.Microgroove.TypeLevel as X
 import Data.Microgroove.Lib
 
 import Data.Vector.Mutable (MVector)

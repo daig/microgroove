@@ -8,12 +8,13 @@ module Data.Microgroove.Rec
   ,toVector, ctoVector
   ,fromVectorN, fromVector, replicate
   ,thaw, thaw#, freeze, freeze#
+  ,module X
   ) where
 import Prelude hiding (replicate)
 import Data.Microgroove.MRec (MRec(..))
 import qualified Data.Microgroove.MRec as M
 import Data.Microgroove.Lib
-import Data.Microgroove.TypeLevel
+import Data.Microgroove.TypeLevel as X
 
 import Data.Vector (Vector)
 import qualified Data.Vector as V

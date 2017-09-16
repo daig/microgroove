@@ -33,11 +33,11 @@ type family Replicate (n :: Nat) (x :: u) :: [u] where
   Replicate n x = x ': Replicate (n-1) x
 
 -- | Inductive Natural Numbers
-data Nat' = Z | S Nat'
+{-data Nat' = Z | S Nat'-}
 -- | An injective form of @Replicate@ using inductive @Nat'@ rather than builtins
-type family Replicate' (n :: Nat') (x :: u) = xs | xs -> n where
-  Replicate' 'Z _ = '[]
-  Replicate' ('S n) x = x ': Replicate' n x
+{-type family Replicate' (n :: Nat') (x :: u) = xs | xs -> n where-}
+  {-Replicate' 'Z _ = '[]-}
+  {-Replicate' ('S n) x = x ': Replicate' n x-}
   
 -- | The Existential Type @Some f@ is some @f x@ where @x@ is known at runtime
 data Some f where Some :: f x -> Some f

@@ -29,6 +29,7 @@ data MRec' s (f :: u -> *) (us :: [u]) where
 
 -- | Split a mutable record into a head vector of length one, and the remaining record
 -- must be statically known to be nonempty
+-- O(1)
 splitCons# :: MRec s f (x ': xs) -> (MVector s (f x),MRec s f xs)
 splitCons# (MRec# v) = (cast# $ VM.take 1 v, MRec# $ VM.tail v)
 
@@ -44,6 +45,7 @@ pattern MRNil <- (upMRec -> MRNil')
 
 -- | Match a nonempty record, refining its type
 -- The head is vector of length one to preserve mutable identity
+-- O(1)
 pattern MRCons :: () => (us' ~ (u ': us)) => VM.MVector s (f u) -> MRec s f us -> MRec s f us'
 pattern MRCons x xs <- (upMRec -> MRCons' x xs)
 
@@ -59,6 +61,7 @@ rmap f xs = cast# xs <$ go xs where
 
 -- | Modify a mutable record in place by mapping a natural tranformation that can make use of the provided constraint.
 -- Ex: `crmap @Show (K . show) :: (MRec s f xs) -> ST s (MRec s (K String) xs)`
+-- O(n)
 crmap :: forall (c :: * -> Constraint) g m f xs. (AllF c f xs, PrimMonad m)
      => (forall x. c (f x) => f x -> g x) -> MRec (PrimState m) f xs -> m (MRec (PrimState m) g xs)
 crmap f xs = cast# xs <$ go xs where
@@ -68,6 +71,7 @@ crmap f xs = cast# xs <$ go xs where
     MRCons x xs -> VM.modify x (castf# @f . f) 0 >> go xs
 
 -- | Convert a mutable record to a mutable vector by mapping to a homogeneous type
+-- O(n)
 toMVector :: forall r m f xs. PrimMonad m
          => (forall x. f x -> r) -> MRec (PrimState m) f xs -> m (MVector (PrimState m) r)
 toMVector f xs = cast# xs <$ go xs where
@@ -77,6 +81,7 @@ toMVector f xs = cast# xs <$ go xs where
     MRCons x xs -> VM.modify x (cast# . f) 0 >> go xs
 
 -- | Convert a mutable record to a mutable vector by mapping to a homogeneous type, making use of provided constraint
+-- O(n)
 ctoMVector :: forall (c :: * -> Constraint) r m f xs. (AllF c f xs, PrimMonad m)
           => (forall x. c (f x) => f x -> r) -> MRec (PrimState m) f xs -> m (MVector (PrimState m) r)
 ctoMVector f xs = cast# xs <$ go xs where

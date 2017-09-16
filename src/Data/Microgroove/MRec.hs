@@ -113,15 +113,33 @@ pattern MRCons x xs <- (upMRec -> MRCons' x xs)
 {-cfmap f (MRec# v) = go @xs 0 >> pure (MRec# v) where-}
   {-go :: forall as. c (f (Head as)) => Int -> m ()-}
   {-go i = VM.modify v (cast# . f . cast# @(f (Head as))) i-}
-cfmap :: forall (c :: * -> Constraint) g m f xs. (AllF c f xs, PrimMonad m)
+rmap :: forall g m f xs. PrimMonad m => (forall x. f x -> g x) -> MRec (PrimState m) f xs -> m (MRec (PrimState m) g xs)
+rmap f xs = cast# xs <$ go xs where
+  go :: MRec (PrimState m) f as -> m ()
+  go = \case
+    x@MRNil -> pure ()
+    MRCons x xs -> VM.modify x (castf# @f . f) 0 >> go xs
+
+crmap :: forall (c :: * -> Constraint) g m f xs. (AllF c f xs, PrimMonad m)
      => (forall x. c (f x) => f x -> g x) -> MRec (PrimState m) f xs -> m (MRec (PrimState m) g xs)
-cfmap f xs = cast# xs <$ go xs where
+crmap f xs = cast# xs <$ go xs where
   go :: forall as. (AllF c f as) => MRec (PrimState m) f as -> m ()
   go = \case
     x@MRNil -> pure ()
     MRCons x xs -> VM.modify x (castf# @f . f) 0 >> go xs
 
+fromMRec :: forall r m f xs. PrimMonad m
+         => (forall x. f x -> r) -> MRec (PrimState m) f xs -> m (MVector (PrimState m) r)
+fromMRec f xs = cast# xs <$ go xs where
+  go :: MRec (PrimState m) f as -> m ()
+  go = \case
+    x@MRNil -> pure ()
+    MRCons x xs -> VM.modify x (cast# . f) 0 >> go xs
 
-
-type family Head (xs :: [u]) where Head (x ': _) = x
-type family Tail (xs :: [u]) where Tail (_ ': xs) = xs
+cfromMRec :: forall (c :: * -> Constraint) r m f xs. (AllF c f xs, PrimMonad m)
+          => (forall x. c (f x) => f x -> r) -> MRec (PrimState m) f xs -> m (MVector (PrimState m) r)
+cfromMRec f xs = cast# xs <$ go xs where
+  go :: forall as. (AllF c f as) => MRec (PrimState m) f as -> m ()
+  go = \case
+    x@MRNil -> pure ()
+    MRCons x xs -> VM.modify x (cast# . f) 0 >> go xs

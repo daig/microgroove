@@ -19,5 +19,12 @@ type family All (c :: u -> Constraint) (xs :: [u]) :: Constraint where
   All c '[] = ()
   All c (x ': xs) = (c x,All c xs)
 
+type family (as :: [k]) ++ (bs :: [k]) where
+  '[] ++ bs = bs
+  (a ': as) ++ bs = a ': (as ++ bs)
+
+type family Head (xs :: [u]) where Head (x ': _) = x
+type family Tail (xs :: [u]) where Tail (_ ': xs) = xs
+
 {-class (c x,cc x) => (c :**: cc) x-}
 {-instance (c x, cc x) => (c :**: cc) x-}

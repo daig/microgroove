@@ -20,8 +20,12 @@ import Data.Proxy
 
 thaw :: PrimMonad m => Rec f us -> m (M.MRec (PrimState m) f us)
 thaw (Rec# v) = M.MRec# <$> V.thaw v
+thaw# :: PrimMonad m => Rec f us -> m (M.MRec (PrimState m) f us)
+thaw# (Rec# v) = M.MRec# <$> V.unsafeThaw v
 freeze :: PrimMonad m => M.MRec (PrimState m) f us -> m (Rec f us)
 freeze (M.MRec# v) = Rec# <$> V.freeze v
+freeze# :: PrimMonad m => M.MRec (PrimState m) f us -> m (Rec f us)
+freeze# (M.MRec# v) = Rec# <$> V.unsafeFreeze v
 
 newtype Rec (f :: u -> *) (us :: [u]) = Rec# (V.Vector Any)
 data Rec' (f :: u -> *) (us :: [u]) where
@@ -81,7 +85,7 @@ aa :: Rec Id '[Integer, Double, Int]
 aa = RCons (Id (1::Integer)) $ RCons (Id (0.1::Double)) $ RCons (Id (3::Int)) RNil
 bb = do
   a <- thaw @IO aa
-  b <- M.cfmap @Show @(K String) (K . show) a
+  b <- M.crmap @Show @(K String) (K . show) a
   freeze b
 
 
@@ -90,16 +94,19 @@ instance Show (Rec f '[]) where show RNil = "[]"
 instance (Show (f x), Show (Rec f xs)) => Show (Rec f (x ': xs)) where
   show (RCons a xs) = show a ++ " : " ++ show xs
 
-{-rmap :: (forall x. f x -> g x) -> Rec f xs -> Rec g xs-}
-{-rmap f (Rec# v) = -}
+rappend :: Rec f as -> Rec f bs -> Rec f (as ++ bs)
+rappend (Rec# as) (Rec# bs) = Rec# $ as V.++ bs
 
-{-cmap :: forall (c :: * -> Constraint) f g xs. All c xs-}
-     {-=> (forall x. c x => f x -> g x) -> Rec f xs -> Rec g xs-}
-{-cmap f = \case-}
-  {-RNil -> RNil-}
-  {-RCons x xs -> RCons (f x) (cmap @c f xs)-}
-{-cfmap :: forall (c :: * -> Constraint) f g xs. AllF c f xs-}
-     {-=> (forall x. c (f x) => f x -> g x) -> Rec f xs -> Rec g xs-}
-{-cfmap f = freeze . M.cfmap @c f <=< thaw-}
+rmap :: (forall x. f x -> g x) -> Rec f xs -> Rec g xs
+rmap f r = runST $ freeze# =<< M.rmap f =<< thaw r
 
+crmap :: forall c g m f xs. AllF c f xs
+      => (forall x. c (f x) => f x -> g x) -> Rec f xs -> Rec g xs
+crmap f r = runST $ freeze# =<< M.crmap @c f =<< thaw r
 
+fromRec :: (forall x. f x -> r) -> Rec f xs -> Vector r
+fromRec f r = runST $ V.unsafeFreeze =<< M.fromMRec f =<< thaw r
+
+cfromRec :: forall c r m f xs. AllF c f xs
+         => (forall x. c (f x) => f x -> r) -> Rec f xs -> Vector r
+cfromRec f r = runST $ V.unsafeFreeze =<< M.cfromMRec @c f =<< thaw r

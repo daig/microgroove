@@ -41,6 +41,7 @@ type family Replicate' (n :: Nat') (x :: u) = xs | xs -> n where
   Replicate' (S n) x = x ': Replicate' n x
   
 -- | The Existential Type @Some f@ is some @f x@ where @x@ is known at runtime
-data Some f = forall x. Some (f x)
+data Some f where Some :: f x -> Some f
+
 -- | Avoids one indirection compared with @Maybe (Some f)@
 data MaybeSome f = forall x. JustSome (f x) | None

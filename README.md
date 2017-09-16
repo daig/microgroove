@@ -8,3 +8,6 @@ Microgroove can be used for lightweight statically specified polymorphic records
 The recommended way to build microgroove is via [nix](https://nixos.org/nix/)
 With [nix integration](https://cabal.readthedocs.io/en/latest/nix-integration.html) in `cabal-install` 2.0 or greater, that's just `cabal --enable-nix build`
 or use [stack](https://www.haskellstack.org) via `stack build`
+
+# contribute
+microgroove is an early alpha, so please submit any bugs or feature requests on the issue tracker

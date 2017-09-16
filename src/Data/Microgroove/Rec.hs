@@ -38,6 +38,9 @@ freeze# (M.MRec# v) = Rec# <$> V.unsafeFreeze v
 
 -- | A heterogeneous record represented by an untyped vector
 newtype Rec (f :: u -> *) (us :: [u]) = Rec# (V.Vector Any)
+-- | A dynamically shaped record, with elements satisfying some constraint
+data SomeRec c f = forall us. AllF c f us => SomeRec (Rec f us)
+
 -- | An intermediate type to deconstruct an @Rec@ into head normal form
 data Rec' (f :: u -> *) (us :: [u]) where
   RNil' :: Rec' f '[]
@@ -100,14 +103,22 @@ mkIndex = RIndex# $ fromInteger $ natVal (Proxy @n)
 
 
 -- | Index into a statically known element of a record
--- O(n)
+-- O(1)
 index :: forall n f xs. KnownNat n => Rec f xs -> f (xs !! n)
 index (Rec# v) = cast# $ v V.! fromInteger (natVal (Proxy @n))
 -- | Prepare a dynamically known index into a statically known record
--- O(1)
+-- O(n)
 checkIndex :: forall (xs :: [u]) f. KnownNat (Length xs) => Rec f xs -> Int -> MaybeSome (RIndex xs)
 checkIndex (Rec# (length -> n)) i | i < n = case someNatVal (fromIntegral i) of
   Just (SomeNat (Proxy :: Proxy n)) -> JustSome $ RIndex# @u @xs @(xs !! n) i
+
+-- | Prepare a dynamically known index
+-- O(n)
+checkIndex' :: forall (xs :: [u]) f. Rec f xs -> Int -> MaybeSome (RIndex xs)
+checkIndex' (RCons (_::f x) _) 0 = JustSome (RZ @u @x)
+checkIndex' (RCons _ xs) n = case checkIndex' xs (n-1) of
+  None -> None
+  JustSome i -> JustSome $ RS i
   
 
 -- | Index into a record with a prepared index

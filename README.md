@@ -5,9 +5,7 @@ Unlike these record types which are represented by linked lists, `microgroove`'s
 Microgroove can be used for lightweight statically specified polymorphic records just like `vinyl`, but also dynamic record types that are only provided at run-time, such as receiving an arbitrary JSON protocol.
 
 # build
-The recommended way to build microgroove is via [nix](https://nixos.org/nix/)
-With [nix integration](https://cabal.readthedocs.io/en/latest/nix-integration.html) in `cabal-install` 2.0 or greater, that's just `cabal --enable-nix build`
-or use [stack](https://www.haskellstack.org) via `stack build`
+The recommended way to build microgroove is via [stack](https://www.haskellstack.org) with `stack build`
 
 # contribute
 microgroove is an early alpha, so please submit any bugs or feature requests on the issue tracker

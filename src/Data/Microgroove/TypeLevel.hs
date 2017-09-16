@@ -44,3 +44,7 @@ data Some f where Some :: f x -> Some f
 
 -- | Avoids one indirection compared with @Maybe (Some f)@
 data MaybeSome f = forall x. JustSome (f x) | None
+
+type family SetAt n xs x where
+  SetAt 0 (_ ': xs) x = x ': xs
+  SetAt n (x ': xs) y = x ': SetAt (n-1) xs y

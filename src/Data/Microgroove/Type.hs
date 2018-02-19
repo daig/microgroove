@@ -1,7 +1,7 @@
 {-# language MagicHash #-}
 {-# language FlexibleContexts #-}
 module Data.Microgroove.Type
-  (Rec(Rec#,RNil,(:&)), module X) where
+  (Rec(Rec#,RNil,(:&)), Rec'(..), upRec, module X) where
 import qualified Data.Vector as V
 import Data.Vector as X (Vector)
 import Data.Microgroove.Lib as X (Any)
@@ -24,7 +24,7 @@ data Rec' (f :: u -> *) (us :: [u]) where
   RCons' :: f u -> Rec f us -> Rec' f (u ': us)
 
 
--- | Pattern match the head of a record that is statically known to be nonempty
+-- Pattern match the head of a record that is statically known to be nonempty
 -- Or prepend an element to a record
 -- Matching is O(1), prepending is O(n)
 {-pattern RCons# :: f x -> Rec f xs -> Rec f (x ': xs)-}
@@ -42,8 +42,10 @@ pattern RNil :: () => (us ~ '[]) => Rec f us
 pattern RNil <- (upRec -> RNil') where
   RNil = Rec# V.empty
 
--- | Construct or pattern match a nonempty record, refining its type
+-- | Construct or pattern match a nonempty record, refining its type.
 -- Matching is O(1), prepending is O(n)
 pattern (:&) :: () => (us' ~ (u ': us)) => f u -> Rec f us -> Rec f us'
 pattern (:&) x xs <- (upRec -> RCons' x xs) where
   x :& (Rec# xs) = Rec# (V.cons (cast# x) xs)
+{-# complete RNil, (:&) #-}
+infixr 5 :&

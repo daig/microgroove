@@ -1,5 +1,6 @@
 {-# language MagicHash #-}
-module Data.Microgroove.Mutable.Type (MRec(MRec#,MRNil,MRCons), module X) where
+module Data.Microgroove.Mutable.Type
+ (MRec(MRec#,MRNil,MRCons), MRec'(..), upMRec, module X) where
 
 import Data.Microgroove.Lib
 import Data.Microgroove.Lib as X (Any)

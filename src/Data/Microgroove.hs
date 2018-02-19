@@ -1,10 +1,14 @@
+{-# OPTIONS_GHC -fno-warn-orphans #-}
 {-# language MagicHash #-}
+{-# language UndecidableInstances #-}
 {-# language FlexibleContexts #-}
 {-# language AllowAmbiguousTypes #-}
 module Data.Microgroove
   (Rec(Rec#,RNil,(:&)), MRec(..)
   ,index, (!), checkIndex, checkIndex'
+  , new
   ,splitCons, rappend, rmap, crmap
+  ,rzip, crzip
   ,toVector, ctoVector
   ,fromVectorN, fromVector, replicate
   ,thaw, thaw#, freeze, freeze#
@@ -64,6 +68,28 @@ rappend (Rec# as) (Rec# bs) = Rec# $ as V.++ bs
 rmap :: (forall x. f x -> g x) -> Rec f xs -> Rec g xs
 rmap f r = runST $ freeze# =<< M.rmap f =<< thaw r
 
+
+rzip :: forall h (f :: k -> *) g (xs :: [k]). (forall x. f x -> g x -> h x)
+     -> Rec f xs -> Rec g xs -> Rec h xs
+rzip f fs gs = runST $ do
+  fs' <- thaw fs
+  gs' <- thaw gs
+  freeze# =<< M.rzip f fs' gs'
+
+crzip :: forall (c :: * -> Constraint) h f g (xs :: [k])
+      . (AllF c f xs, AllF c g xs) => (forall x. (c (f x), c (g x)) => f x -> g x -> h x)
+     -> Rec f xs -> Rec g xs -> Rec h xs
+crzip f fs gs = runST $ do
+  fs' <- thaw fs
+  gs' <- thaw gs
+  freeze# =<< M.crzip @k @c f fs' gs'
+
+instance (KnownNat (Length xs), AllF Monoid f (xs :: [k])) => Monoid (Rec f xs) where
+  mempty = new @k @Monoid @xs mempty
+  mappend = crzip @k @Monoid mappend
+
+
+
 -- | Transform a record in by mapping a natural tranformation that can make use of the provided constraint. Ex:
 --
 -- > crmap @Show (K . show) :: (Rec f xs) -> (MRec (K String) xs)
@@ -88,6 +114,13 @@ ctoVector f r = runST $ V.unsafeFreeze =<< M.ctoMVector @c f =<< thaw r
 -- O(n)
 replicate :: forall n f x. KnownNat n => f x -> Rec f (Replicate n x)
 replicate = Rec# . mapCast# @Any . V.replicate (fromInteger $ natVal (Proxy @n))
+
+new :: forall (c :: * -> Constraint) (xs :: [k]) f. (AllF c f xs, KnownNat (Length xs))
+     => (forall x. c (f x) => f x) -> Rec f xs
+new x = runST $ do
+  xs <- M.new# @f @xs
+  xs' <- M.crmap @c (\_ -> x) xs
+  freeze# xs'
 -- | Convert a vector into a homogeneous record of statically known size.
 -- O(1)
 fromVectorN :: forall n f x. KnownNat n => Vector (f x) -> Maybe (Rec f (Replicate n x))
@@ -133,4 +166,3 @@ checkIndex' ((_::f x) :& _) 0 = JustSome (RZ @u @x)
 checkIndex' (_ :& xs) n = case checkIndex' xs (n-1) of
   None -> None
   JustSome i -> JustSome $ RS i
-checkIndex' _ _ = error "Impossible! RNil and RCons inexhaustive in checkIndex'"

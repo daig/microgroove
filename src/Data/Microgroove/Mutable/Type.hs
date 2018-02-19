@@ -35,3 +35,5 @@ pattern MRNil <- (upMRec -> MRNil')
 -- O(1)
 pattern MRCons :: () => (us' ~ (u ': us)) => VM.MVector s (f u) -> MRec s f us -> MRec s f us'
 pattern MRCons x xs <- (upMRec -> MRCons' x xs)
+
+{-# complete MRNil, MRCons #-}

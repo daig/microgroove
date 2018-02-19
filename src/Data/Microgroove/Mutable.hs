@@ -8,13 +8,14 @@ module Data.Microgroove.Mutable
   (MRec(MRec#,MRNil,MRCons)
   ,new#
   ,rmap, crmap
+  ,rzip, crzip
   ,toMVector, ctoMVector
-  ,modify
+  ,modify, index
   ,module X
   ) where
 import Data.Microgroove.Lib
 import qualified Data.Vector.Mutable as VM
-import Control.Monad.Primitive (PrimMonad(..))
+import Control.Monad.Primitive as X (PrimMonad(..))
 import Data.Microgroove.Mutable.Type as X
 
 
@@ -27,7 +28,22 @@ rmap f xs = cast# xs <$ go xs where
   go = \case
     MRNil -> pure ()
     MRCons x xs' -> VM.modify x (castf# @f . f) 0 >> go xs'
-    _ -> error "impossible! MRNil and MRCons were inexhaustive in rmap"
+
+rzip :: forall h m (f :: k -> *) g (xs :: [k]). PrimMonad m
+     => (forall x. f x -> g x -> h x)
+     -> MRec (PrimState m) f xs -> MRec (PrimState m) g xs
+     -> m (MRec (PrimState m) h xs)
+rzip f xs ys = cast# ys <$ go xs ys where
+  go :: forall as. MRec (PrimState m) f as -> MRec (PrimState m) g as -> m ()
+  go MRNil MRNil = pure ()
+  go (MRCons x xs') (MRCons y ys') = do
+    x' <- VM.unsafeRead x 0
+    VM.modify y (castf# @g . f x') 0
+    go xs' ys'
+
+index :: forall n m f xs. (KnownNat n,PrimMonad m) => MRec (PrimState m) f xs -> m (f (xs !! n))
+index (MRec# vm) = mapCast# $ vm `VM.unsafeRead` intVal @n
+  
 
 -- | Modify a mutable record in place by mapping a natural tranformation that can make use of the provided constraint.
 -- Ex: `crmap @Show (K . show) :: (MRec s f xs) -> ST s (MRec s (K String) xs)`
@@ -39,7 +55,20 @@ crmap f xs = cast# xs <$ go xs where
   go = \case
     MRNil -> pure ()
     MRCons x xs' -> VM.modify x (castf# @f . f) 0 >> go xs'
-    _ -> error "impossible! MRNil and MRCons were inexhaustive in crmap"
+
+crzip :: forall (c :: * -> Constraint) h m (f :: k -> *) g (xs :: [k])
+      . (AllF c f xs, AllF c g xs, PrimMonad m)
+     => (forall x. (c (f x), c (g x)) => f x -> g x -> h x)
+     -> MRec (PrimState m) f xs -> MRec (PrimState m) g xs
+     -> m (MRec (PrimState m) h xs)
+crzip f xs ys = cast# ys <$ go xs ys where
+  go :: forall as. (AllF c f as, AllF c g as)
+     => MRec (PrimState m) f as -> MRec (PrimState m) g as -> m ()
+  go MRNil MRNil = pure ()
+  go (MRCons x xs') (MRCons y ys') = do
+    x' <- VM.unsafeRead x 0
+    VM.modify y (castf# @g . f x') 0
+    go xs' ys'
 
 -- | Convert a mutable record to a mutable vector by mapping to a homogeneous type
 -- O(n)
@@ -50,7 +79,6 @@ toMVector f xs = cast# xs <$ go xs where
   go = \case
     MRNil -> pure ()
     MRCons x xs' -> VM.modify x (cast# . f) 0 >> go xs'
-    _ -> error "impossible! MRNil and MRCons were inexhaustive in toMVector"
 
 -- | Convert a mutable record to a mutable vector by mapping to a homogeneous type, making use of provided constraint
 -- O(n)
@@ -61,7 +89,6 @@ ctoMVector f xs = cast# xs <$ go xs where
   go = \case
     MRNil -> pure ()
     MRCons x xs' -> VM.modify x (cast# . f) 0 >> go xs'
-    _ -> error "impossible! MRNil and MRCons were inexhaustive in ctoMVector"
 
 -- | Create a mutable record of the given shape. The memory is not initialized
 new# :: forall f xs m. (KnownNat (Length xs), PrimMonad m) => m (MRec (PrimState m) f xs)

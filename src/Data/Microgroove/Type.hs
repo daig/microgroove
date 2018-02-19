@@ -18,6 +18,9 @@ instance (Show (f x), Show (Rec f xs)) => Show (Rec f (x ': xs)) where
   show (a :& xs) = show a ++ " : " ++ show xs
   show _ = error "Impossible! RCons inexhaustive in show @(Rec f (x ': xs))"
 
+instance Eq (Rec f '[]) where RNil == RNil = True
+instance Ord (Rec f '[]) where compare RNil RNil = EQ
+
 -- | An intermediate type to deconstruct an @Rec@ into head normal form
 data Rec' (f :: u -> *) (us :: [u]) where
   RNil' :: Rec' f '[]

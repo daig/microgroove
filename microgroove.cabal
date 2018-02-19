@@ -1,5 +1,5 @@
 name:                microgroove
-version:             0.1.0.0
+version:             0.1.0.1
 synopsis:           Array-backed extensible records
 description:        Array-backed extensible records, providing fast access and mutation
 homepage:            https://github.com/daig/microgroove

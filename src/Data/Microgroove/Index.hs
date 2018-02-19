@@ -23,7 +23,7 @@ pattern RS i <- (upRIndex -> RS' i) where
   RS (RIndex# i) = RIndex# (1+i)
 
   
--- | Construct a statically known index into a record
+-- | Construct a statically known index into a record.
 -- O(1)
 mkIndex :: forall n xs . (KnownNat n, n <= Length xs - 1) => RIndex xs (xs !! n)
 mkIndex = RIndex# $ intVal @n

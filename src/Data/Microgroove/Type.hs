@@ -1,7 +1,7 @@
 {-# language MagicHash #-}
 {-# language FlexibleContexts #-}
 module Data.Microgroove.Type
-  (Rec(Rec#,RNil,RCons), module X) where
+  (Rec(Rec#,RNil,(:&)), module X) where
 import qualified Data.Vector as V
 import Data.Vector as X (Vector)
 import Data.Microgroove.Lib as X (Any)
@@ -15,7 +15,7 @@ instance Show (Rec f '[]) where
   show RNil = "[]"
   show _ = error "Impossible! RNil inexhaustive in show @(Rec f '[])"
 instance (Show (f x), Show (Rec f xs)) => Show (Rec f (x ': xs)) where
-  show (RCons a xs) = show a ++ " : " ++ show xs
+  show (a :& xs) = show a ++ " : " ++ show xs
   show _ = error "Impossible! RCons inexhaustive in show @(Rec f (x ': xs))"
 
 -- | An intermediate type to deconstruct an @Rec@ into head normal form
@@ -44,6 +44,6 @@ pattern RNil <- (upRec -> RNil') where
 
 -- | Construct or pattern match a nonempty record, refining its type
 -- Matching is O(1), prepending is O(n)
-pattern RCons :: () => (us' ~ (u ': us)) => f u -> Rec f us -> Rec f us'
-pattern RCons x xs <- (upRec -> RCons' x xs) where
-  RCons x (Rec# xs) = Rec# (V.cons (cast# x) xs)
+pattern (:&) :: () => (us' ~ (u ': us)) => f u -> Rec f us -> Rec f us'
+pattern (:&) x xs <- (upRec -> RCons' x xs) where
+  x :& (Rec# xs) = Rec# (V.cons (cast# x) xs)

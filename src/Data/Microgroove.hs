@@ -2,7 +2,7 @@
 {-# language FlexibleContexts #-}
 {-# language AllowAmbiguousTypes #-}
 module Data.Microgroove
-  (Rec(Rec#,RNil,RCons), MRec(..)
+  (Rec(Rec#,RNil,(:&)), MRec(..)
   ,index, (!), checkIndex, checkIndex'
   ,splitCons, rappend, rmap, crmap
   ,toVector, ctoVector
@@ -129,8 +129,8 @@ checkIndex _ _ = None
 -- O(n)
 checkIndex' :: forall (xs :: [u]) f. Rec f xs -> Int -> MaybeSome (RIndex xs)
 checkIndex' RNil _ = None
-checkIndex' (RCons (_::f x) _) 0 = JustSome (RZ @u @x)
-checkIndex' (RCons _ xs) n = case checkIndex' xs (n-1) of
+checkIndex' ((_::f x) :& _) 0 = JustSome (RZ @u @x)
+checkIndex' (_ :& xs) n = case checkIndex' xs (n-1) of
   None -> None
   JustSome i -> JustSome $ RS i
 checkIndex' _ _ = error "Impossible! RNil and RCons inexhaustive in checkIndex'"

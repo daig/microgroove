@@ -1,5 +1,5 @@
 name: microgroove
-version: '0.1.1.1'
+version: '0.1.2.0'
 synopsis: Array-backed extensible records
 description: Array-backed extensible records, providing fast access and mutation
 category: Records

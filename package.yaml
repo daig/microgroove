@@ -1,0 +1,34 @@
+name: microgroove
+version: '0.1.1.0'
+synopsis: Array-backed extensible records
+description: Array-backed extensible records, providing fast access and mutation
+category: Records
+author: Dai
+maintainer: dailectic@gmail.com
+copyright: 2018 Dai
+license: MIT
+github: daig/microgroove
+extra-source-files:
+- README.md
+default-extensions:
+- RankNTypes
+- LambdaCase
+- ConstraintKinds
+- TypeFamilies
+- FlexibleInstances
+- ViewPatterns
+- PatternSynonyms
+- TypeOperators
+- GADTs
+- DataKinds
+- PolyKinds
+- KindSignatures
+- TypeApplications
+- ScopedTypeVariables
+dependencies:
+- base >=4.7 && <5
+- vector
+- primitive
+library:
+  source-dirs: src
+  ghc-options: -Wall

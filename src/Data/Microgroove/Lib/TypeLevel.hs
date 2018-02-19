@@ -1,12 +1,11 @@
-{-# language UndecidableInstances #-}
 {-# language TypeFamilyDependencies #-}
+{-# language UndecidableInstances #-}
 {-# language AllowAmbiguousTypes #-}
-{-# language UndecidableSuperClasses #-}
-{-# language MultiParamTypeClasses #-}
-module Data.Microgroove.TypeLevel where
-import GHC.Exts (Constraint)
-import GHC.TypeLits
-
+module Data.Microgroove.Lib.TypeLevel (module Data.Microgroove.Lib.TypeLevel, module X) where
+import GHC.TypeLits as X (Nat, type (-), type (+), type (<=), KnownNat)
+import GHC.TypeLits (natVal)
+import GHC.Exts as X (Constraint,Any)
+import Data.Proxy as X (Proxy(..))
 
 -- | Index into a type level list
 type family ((xs :: [u]) !! (n :: Nat)) where
@@ -39,12 +38,9 @@ type family Replicate (n :: Nat) (x :: u) :: [u] where
   {-Replicate' 'Z _ = '[]-}
   {-Replicate' ('S n) x = x ': Replicate' n x-}
   
--- | The Existential Type @Some f@ is some @f x@ where @x@ is known at runtime
-data Some f where Some :: f x -> Some f
-
--- | Avoids one indirection compared with @Maybe (Some f)@
-data MaybeSome f = forall x. JustSome (f x) | None
-
 type family SetAt n xs x where
   SetAt 0 (_ ': xs) x = x ': xs
   SetAt n (x ': xs) y = x ': SetAt (n-1) xs y
+
+intVal :: forall n. KnownNat n => Int
+intVal = fromInteger (natVal (Proxy @n))

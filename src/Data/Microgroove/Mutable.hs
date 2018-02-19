@@ -4,7 +4,7 @@
 {-# language UndecidableSuperClasses #-}
 {-# language UndecidableInstances #-}
 {-# language AllowAmbiguousTypes #-}
-module Data.Microgroove.MRec
+module Data.Microgroove.Mutable
   (MRec(MRec#,MRNil,MRCons)
   ,new#
   ,rmap, crmap
@@ -12,46 +12,11 @@ module Data.Microgroove.MRec
   ,modify
   ,module X
   ) where
-import Data.Microgroove.TypeLevel as X
 import Data.Microgroove.Lib
-
-import Data.Vector.Mutable (MVector)
 import qualified Data.Vector.Mutable as VM
-import GHC.Exts (Any,Constraint)
 import Control.Monad.Primitive (PrimMonad(..))
+import Data.Microgroove.Mutable.Type as X
 
-import GHC.TypeLits
-import Data.Proxy
-
-
--- | A mutable heterogeneous record represented by an untyped mutable vector
-newtype MRec s (f :: u -> *) (us :: [u]) = MRec# (MVector s Any)
--- | An intermediate type to deconstruct an @MRec@ into head normal form
-data MRec' s (f :: u -> *) (us :: [u]) where
-  MRNil' :: MRec' s f '[]
-  MRCons' :: MVector s (f u) -> MRec s f us -> MRec' s f (u ': us)
-
--- | Split a mutable record into a head vector of length one, and the remaining record
--- must be statically known to be nonempty
--- O(1)
-{-splitCons# :: MRec s f (x ': xs) -> (MVector s (f x),MRec s f xs)-}
-{-splitCons# (MRec# v) = (cast# $ VM.take 1 v, MRec# $ VM.tail v)-}
-
--- | Convert an MRec to head normal form,
--- refining the type to distinguish empty from nonempty records
-upMRec :: MRec s f us -> MRec' s f us
-upMRec (MRec# v) | VM.null v = cast# MRNil'
-                 | otherwise = cast# $ MRCons' (cast# $ VM.take 1 v) (MRec# $ VM.tail v)
-
--- | Match an empty record, refining its type
-pattern MRNil :: () => (us ~ '[]) => MRec s f us
-pattern MRNil <- (upMRec -> MRNil')
-
--- | Match a nonempty record, refining its type
--- The head is vector of length one to preserve mutable identity
--- O(1)
-pattern MRCons :: () => (us' ~ (u ': us)) => VM.MVector s (f u) -> MRec s f us -> MRec s f us'
-pattern MRCons x xs <- (upMRec -> MRCons' x xs)
 
 
 -- | Modify a mutable record in place by mapping a natural tranformation.
@@ -100,8 +65,7 @@ ctoMVector f xs = cast# xs <$ go xs where
 
 -- | Create a mutable record of the given shape. The memory is not initialized
 new# :: forall f xs m. (KnownNat (Length xs), PrimMonad m) => m (MRec (PrimState m) f xs)
-new# = MRec# <$> VM.unsafeNew (fromInteger (natVal (Proxy @(Length xs))))
-
+new# = MRec# <$> VM.unsafeNew (intVal @(Length xs))
 -- | Modify a record in place by appling an endofunctor at the index. O(1)
 modify :: forall n m f xs y. (KnownNat n, PrimMonad m)
        => (f (xs !! n) -> f y) -> MRec (PrimState m) f xs

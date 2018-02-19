@@ -8,7 +8,7 @@ module Data.Microgroove.Rec
   ,toVector, ctoVector
   ,fromVectorN, fromVector, replicate
   ,thaw, thaw#, freeze, freeze#
-  ,modify, setAt
+  ,modify
   ,module X
   ) where
 import Prelude hiding (replicate)
@@ -193,14 +193,9 @@ fromVector v = case someNatVal (fromIntegral $ V.length v) of
     -> Some $ Rec# @u @f @(Replicate n x) $ mapCast# @Any v
 
 -- | Transform a record by appling an endofunctor at the index. O(n)
-modify :: forall n xs fx f. (fx ~ f (xs !! n), KnownNat n)
-       => (fx -> fx) -> Rec f xs -> Rec f xs
+modify :: forall n f xs y. KnownNat n
+       => (f (xs !! n) -> f y) -> Rec f xs -> Rec f (SetAt n xs y)
 modify f r = runST $ do
   mr <- thaw r
-  M.modify @n f mr
-  freeze# mr
-
--- | Transform a record by setting its value at an index, may change the record type. O(n)
-setAt :: forall n x xs f. KnownNat n
-      => f x -> Rec f xs -> Rec f (SetAt n xs x)
-setAt x r = runST $ freeze# =<< M.setAt @n x =<< thaw r
+  mr' <- M.modify @n f mr
+  freeze# mr'

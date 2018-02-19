@@ -1,6 +1,9 @@
 {-# language MagicHash #-}
+{-# language AllowAmbiguousTypes #-}
 module Data.Microgroove.Lib where
+import GHC.TypeLits
 import Unsafe.Coerce (unsafeCoerce)
+import Data.Proxy
 
 -- | @unsafeCoerce@ with the type arguments flipped for easier TypeApplications
 cast# :: forall b a. a -> b
@@ -21,3 +24,6 @@ instance Functor Id where fmap f (Id a) = Id (f a)
 
 -- | The Konstant Functor
 newtype K a b = K a deriving Show
+
+intVal :: forall n. KnownNat n => Int
+intVal = fromInteger (natVal (Proxy @n))

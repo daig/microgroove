@@ -9,7 +9,7 @@ module Data.Microgroove.MRec
   ,new#
   ,rmap, crmap
   ,toMVector, ctoMVector
-  ,modify, setAt
+  ,modify
   ,module X
   ) where
 import Data.Microgroove.TypeLevel as X
@@ -103,10 +103,7 @@ new# :: forall f xs m. (KnownNat (Length xs), PrimMonad m) => m (MRec (PrimState
 new# = MRec# <$> VM.unsafeNew (fromInteger (natVal (Proxy @(Length xs))))
 
 -- | Modify a record in place by appling an endofunctor at the index. O(1)
-modify :: forall n xs fx f m. (fx ~ f (xs !! n), PrimMonad m, KnownNat n)
-       => (fx -> fx) -> MRec (PrimState m) f xs -> m ()
-modify f (MRec# vm) = VM.modify vm (overcast# @fx f) (fromInteger (natVal (Proxy @n)))
--- | Modify a record in place by setting its value at an index. May change record type. O(1)
-setAt :: forall n x xs f m. (PrimMonad m, KnownNat n)
-      => f x -> MRec (PrimState m) f xs -> m (MRec (PrimState m) f (SetAt n xs x))
-setAt x rm@(MRec# vm) = cast# rm <$ VM.modify vm (cast# @Any . (\_ -> x)) (fromInteger (natVal (Proxy @n)))
+modify :: forall n m f xs y. (KnownNat n, PrimMonad m)
+       => (f (xs !! n) -> f y) -> MRec (PrimState m) f xs
+       -> m (MRec (PrimState m) f (SetAt n xs y))
+modify f rm@(MRec# vm) = cast# rm <$ VM.modify vm (cast# @Any . f . cast#) (intVal @n)

@@ -89,9 +89,19 @@ crzip' f fs gs = runST $ do
   gs' <- thaw gs
   freeze# =<< M.crzip @k @c f fs' gs'
 
+-- | initialize each field with @mempty@, and @mappend@ fields pairwise
 instance (KnownNat (Length xs), AllF Monoid f (xs :: [k])) => Monoid (Rec f xs) where
   mempty = new' @k @Monoid @xs mempty
   mappend = crzip' @k @Monoid mappend
+
+instance (KnownNat (Length xs), AllF Num f (xs :: [k])) => Num (Rec f xs) where
+  fromInteger n = new' @k @Num (fromInteger n)
+  (+) = crzip' @k @Num (+)
+  (-) = crzip' @k @Num (-)
+  (*) = crzip' @k @Num (*)
+  negate = crmap @Num negate
+  abs = crmap @Num abs
+  signum = crmap @Num signum
 
 
 
@@ -122,7 +132,7 @@ replicate = Rec# . mapCast# @Any . V.replicate (fromInteger $ natVal (Proxy @n))
 
 -- | construct a record with values given by the constrained expression. Ex:
 --
---  > new @Num @'[Int,Double,Word] @Sum (3 * 2)
+--  > new @Num @'[Int,Double,Word] @Sum (3 * 2) = Sum (6::Int) :& Sum (6.0::Double) :& Sum (6::Word) :& RNil
 --
 --  O(n)
 new :: forall (c :: * -> Constraint) (xs :: [*]) f. (AllF c f xs, KnownNat (Length xs))

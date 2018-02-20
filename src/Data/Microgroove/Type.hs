@@ -9,8 +9,10 @@ import Data.Microgroove.Lib
 
 -- | A heterogeneous record represented by an untyped vector
 newtype Rec (f :: u -> *) (us :: [u]) = Rec# (V.Vector Any)
--- | A dynamically shaped record, with elements satisfying some constraint
+
+-- A dynamically shaped record, with elements satisfying some constraint
 {-data SomeRec c f = forall us. AllF c f us => SomeRec (Rec f us)-}
+
 instance Show (Rec f '[]) where
   show RNil = "[]"
   show _ = error "Impossible! RNil inexhaustive in show @(Rec f '[])"

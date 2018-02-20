@@ -7,9 +7,11 @@ module Data.Microgroove
   (Rec(Rec#,RNil,(:&)), MRec(..)
   ,index, (!), checkIndex, checkIndex'
   , new, new'
-  ,splitCons, rappend, rmap, crmap
+  ,splitCons, rappend
+  ,rmap, crmap, rmapM, crmapM
   ,rzip, crzip
   ,toVector, ctoVector
+  ,foldMapF, cfoldMapF
   ,fromVectorN, fromVector, replicate
   ,thaw, thaw#, freeze, freeze#
   ,modify
@@ -27,6 +29,7 @@ import qualified Data.Vector as V
 import Control.Monad.ST
 import Control.Monad.Primitive (PrimMonad(..))
 import GHC.TypeLits
+import GHC.Float
 
 -- | Copy a record into a fresh mutable record.
 -- O(n)
@@ -68,6 +71,25 @@ rappend (Rec# as) (Rec# bs) = Rec# $ as V.++ bs
 rmap :: (forall x. f x -> g x) -> Rec f xs -> Rec g xs
 rmap f r = runST $ freeze# =<< M.rmap f =<< thaw r
 
+-- | Traverse a record by mapping an effectful natural tranformation over each element.
+-- O(n)
+rmapM :: forall m f g xs. PrimMonad m => (forall x. f x -> m (g x)) -> Rec f xs -> m (Rec g xs)
+rmapM f r = freeze# =<< M.rmapM f =<< thaw r
+
+-- | Traverse a record by mapping an effectful constrained tranformation.
+-- O(n)
+crmapM :: forall c m g f xs. (PrimMonad m, AllF c f xs)
+      => (forall x. c (f x) => f x -> m (g x)) -> Rec f xs -> m (Rec g xs)
+crmapM f r = freeze# =<< M.crmapM @c f =<< thaw r
+
+-- | Transform a record by mapping a natural tranformation that can make use of the provided constraint. Ex:
+--
+-- > crmap @Show (K . show) :: (Rec f xs) -> (MRec (K String) xs)
+--
+-- O(n)
+crmap :: forall c g f xs. AllF c f xs
+      => (forall x. c (f x) => f x -> g x) -> Rec f xs -> Rec g xs
+crmap f r = runST $ freeze# =<< M.crmap @c f =<< thaw r
 
 -- | Zip two records together with a natural combiner. O(n)
 rzip :: forall h (f :: k -> *) g (xs :: [k]). (forall x. f x -> g x -> h x)
@@ -103,21 +125,62 @@ instance (KnownNat (Length xs), AllF Num f (xs :: [k])) => Num (Rec f xs) where
   abs = crmap @Num abs
   signum = crmap @Num signum
 
+instance (KnownNat (Length xs), AllF Num f xs, AllF Fractional f (xs :: [k])) => Fractional (Rec f xs) where
+  fromRational n = new' @k @Fractional (fromRational n)
+  (/) = crzip' @k @Fractional (/)
+  recip = crmap @Fractional recip
+
+instance (KnownNat (Length xs), Fractional (Rec f (xs :: [k])), AllF Floating f xs) => Floating (Rec f xs) where
+  pi = new' @k @Floating pi
+  exp = crmap @Floating exp
+  log = crmap @Floating log
+  sqrt = crmap @Floating sqrt
+  sin = crmap @Floating sin
+  cos = crmap @Floating cos
+  tan = crmap @Floating tan
+  asin = crmap @Floating asin
+  acos = crmap @Floating acos
+  atan = crmap @Floating atan
+  sinh = crmap @Floating sinh
+  cosh = crmap @Floating cosh
+  tanh = crmap @Floating tanh
+  asinh = crmap @Floating asinh
+  acosh = crmap @Floating acosh
+  atanh = crmap @Floating atanh
+  log1p = crmap @Floating log1p
+  expm1 = crmap @Floating expm1
+  log1pexp = crmap @Floating log1pexp
+  log1mexp = crmap @Floating log1mexp
 
 
--- | Transform a record in by mapping a natural tranformation that can make use of the provided constraint. Ex:
---
--- > crmap @Show (K . show) :: (Rec f xs) -> (MRec (K String) xs)
---
--- O(n)
-crmap :: forall c g f xs. AllF c f xs
-      => (forall x. c (f x) => f x -> g x) -> Rec f xs -> Rec g xs
-crmap f r = runST $ freeze# =<< M.crmap @c f =<< thaw r
+
 
 -- | Convert a record to a vector by mapping to a homogeneous type.
 -- O(n)
 toVector :: (forall x. f x -> r) -> Rec f xs -> Vector r
 toVector f r = runST $ V.unsafeFreeze =<< M.toMVector f =<< thaw r
+
+-- | Convert a record to a vector by mapping to a homogeneous type.
+-- O(n)
+{-ctoVector :: AllF c f xs => (forall x. c (f x) => f x -> r) -> Rec f xs -> Vector r-}
+{-toVector f r = runST $ V.unsafeFreeze =<< M.toMVector f =<< thaw r-}
+
+-- | Fold over a record by naturally mapping to a @Monoid@ accumulator
+foldMapF :: forall r f xs. Monoid r => (forall x. f x -> r) -> Rec f xs -> r
+foldMapF f = go where
+  go :: forall as. Rec f as -> r
+  go = \case
+    RNil -> mempty
+    x :& xs -> f x `mappend` go xs
+
+-- | Fold over a record by mapping to a @Monoid@ accumulator
+cfoldMapF :: forall (c :: * -> Constraint) r f xs. (AllF c f xs, Monoid r)
+          => (forall x. c (f x) => f x -> r) -> Rec f xs -> r
+cfoldMapF f = go where
+  go :: forall as. AllF c f as => Rec f as -> r
+  go = \case
+    RNil -> mempty
+    x :& xs -> f x `mappend` go xs
 
 -- | Convert a record to a vector by mapping to a homogeneous type, making use of provided constraint.
 -- O(n)

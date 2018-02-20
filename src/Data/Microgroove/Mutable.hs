@@ -7,7 +7,7 @@
 module Data.Microgroove.Mutable
   (MRec(MRec#,MRNil,MRCons)
   ,new#
-  ,rmap, crmap
+  ,rmap, crmap, rmapM, crmapM
   ,rzip, crzip
   ,toMVector, ctoMVector
   ,modify, index
@@ -29,6 +29,32 @@ rmap f xs = cast# xs <$ go xs where
     MRNil -> pure ()
     MRCons x xs' -> VM.modify x (castf# @f . f) 0 >> go xs'
 
+-- | Traverse a mutable record in place by mapping an effectful constrained tranformation.
+-- O(n)
+rmapM :: forall g m f xs. PrimMonad m => (forall x. f x -> m (g x)) -> MRec (PrimState m) f xs -> m (MRec (PrimState m) g xs)
+rmapM f xs = cast# xs <$ go xs where
+  go :: MRec (PrimState m) f as -> m ()
+  go = \case
+    MRNil -> pure ()
+    MRCons x xs' -> do
+      x' <- f =<< VM.unsafeRead x 0
+      VM.write x 0 (castf# @f x')
+      go xs'
+
+-- | Traverse a mutable record in place by mapping an effectful natural tranformation.
+-- O(n)
+crmapM :: forall (c :: * -> Constraint) g m f xs. (AllF c f xs, PrimMonad m)
+       => (forall x. c (f x) => f x -> m (g x)) -> MRec (PrimState m) f xs
+       -> m (MRec (PrimState m) g xs)
+crmapM f xs = cast# xs <$ go xs where
+  go :: AllF c f as => MRec (PrimState m) f as -> m ()
+  go = \case
+    MRNil -> pure ()
+    MRCons x xs' -> do
+      x' <- f =<< VM.unsafeRead x 0
+      VM.write x 0 (castf# @f x')
+      go xs'
+
 -- | Combine two mutable records elementwise with a natural combiner, _into_ the second the second record.
 --
 -- Mutates only the second argument. O(n)
@@ -37,7 +63,7 @@ rzip :: forall h m (f :: k -> *) g (xs :: [k]). PrimMonad m
      -> MRec (PrimState m) f xs -> MRec (PrimState m) g xs
      -> m (MRec (PrimState m) h xs)
 rzip f xs ys = cast# ys <$ go xs ys where
-  go :: forall as. MRec (PrimState m) f as -> MRec (PrimState m) g as -> m ()
+  go :: MRec (PrimState m) f as -> MRec (PrimState m) g as -> m ()
   go MRNil MRNil = pure ()
   go (MRCons x xs') (MRCons y ys') = do
     x' <- VM.unsafeRead x 0
@@ -54,7 +80,7 @@ index (MRec# vm) = mapCast# $ vm `VM.unsafeRead` intVal @n
 crmap :: forall (c :: * -> Constraint) g m f xs. (AllF c f xs, PrimMonad m)
      => (forall x. c (f x) => f x -> g x) -> MRec (PrimState m) f xs -> m (MRec (PrimState m) g xs)
 crmap f xs = cast# xs <$ go xs where
-  go :: forall as. (AllF c f as) => MRec (PrimState m) f as -> m ()
+  go :: AllF c f as => MRec (PrimState m) f as -> m ()
   go = \case
     MRNil -> pure ()
     MRCons x xs' -> VM.modify x (castf# @f . f) 0 >> go xs'
@@ -68,7 +94,7 @@ crzip :: forall (c :: * -> Constraint) h m (f :: k -> *) g (xs :: [k])
      -> MRec (PrimState m) f xs -> MRec (PrimState m) g xs
      -> m (MRec (PrimState m) h xs)
 crzip f xs ys = cast# ys <$ go xs ys where
-  go :: forall as. (AllF c f as, AllF c g as)
+  go :: (AllF c f as, AllF c g as)
      => MRec (PrimState m) f as -> MRec (PrimState m) g as -> m ()
   go MRNil MRNil = pure ()
   go (MRCons x xs') (MRCons y ys') = do
@@ -91,7 +117,7 @@ toMVector f xs = cast# xs <$ go xs where
 ctoMVector :: forall (c :: * -> Constraint) r m f xs. (AllF c f xs, PrimMonad m)
           => (forall x. c (f x) => f x -> r) -> MRec (PrimState m) f xs -> m (MVector (PrimState m) r)
 ctoMVector f xs = cast# xs <$ go xs where
-  go :: forall as. (AllF c f as) => MRec (PrimState m) f as -> m ()
+  go :: AllF c f as => MRec (PrimState m) f as -> m ()
   go = \case
     MRNil -> pure ()
     MRCons x xs' -> VM.modify x (cast# . f) 0 >> go xs'

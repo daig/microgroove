@@ -29,6 +29,9 @@ rmap f xs = cast# xs <$ go xs where
     MRNil -> pure ()
     MRCons x xs' -> VM.modify x (castf# @f . f) 0 >> go xs'
 
+-- | Combine two mutable records elementwise with a natural combiner, _into_ the second the second record.
+--
+-- Mutates only the second argument. O(n)
 rzip :: forall h m (f :: k -> *) g (xs :: [k]). PrimMonad m
      => (forall x. f x -> g x -> h x)
      -> MRec (PrimState m) f xs -> MRec (PrimState m) g xs
@@ -56,6 +59,9 @@ crmap f xs = cast# xs <$ go xs where
     MRNil -> pure ()
     MRCons x xs' -> VM.modify x (castf# @f . f) 0 >> go xs'
 
+-- | Combine two mutable records elementwise with a constrained combiner, _into_ the second the second record.
+--
+-- Mutates only the second argument. O(n)
 crzip :: forall (c :: * -> Constraint) h m (f :: k -> *) g (xs :: [k])
       . (AllF c f xs, AllF c g xs, PrimMonad m)
      => (forall x. (c (f x), c (g x)) => f x -> g x -> h x)

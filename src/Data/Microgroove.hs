@@ -6,7 +6,7 @@
 module Data.Microgroove
   (Rec(Rec#,RNil,(:&)), MRec(..)
   ,index, (!), checkIndex, checkIndex'
-  , new
+  , new, new'
   ,splitCons, rappend, rmap, crmap
   ,rzip, crzip
   ,toVector, ctoVector
@@ -55,38 +55,43 @@ splitCons (Rec# v) = (cast# $ V.head v, Rec# $ V.tail v)
 
 -- | Index into a record with a prepared index.
 -- O(1)
-(!) :: Rec f us -> RIndex us u -> f u
-Rec# v ! RIndex# i = cast# $ v V.! i
+(!) :: Rec f us -> Index us u -> f u
+Rec# v ! Index# i = cast# $ v V.! i
 
 -- | Append two records.
 -- O(n+m)
 rappend :: Rec f as -> Rec f bs -> Rec f (as ++ bs)
 rappend (Rec# as) (Rec# bs) = Rec# $ as V.++ bs
 
--- | Transform a mutable record in by mapping a natural tranformation.
+-- | Transform a record by mapping a natural tranformation over each element.
 -- O(n)
 rmap :: (forall x. f x -> g x) -> Rec f xs -> Rec g xs
 rmap f r = runST $ freeze# =<< M.rmap f =<< thaw r
 
 
+-- | Zip two records together with a natural combiner. O(n)
 rzip :: forall h (f :: k -> *) g (xs :: [k]). (forall x. f x -> g x -> h x)
      -> Rec f xs -> Rec g xs -> Rec h xs
 rzip f fs gs = runST $ do
-  fs' <- thaw fs
+  fs' <- thaw# fs
   gs' <- thaw gs
   freeze# =<< M.rzip f fs' gs'
 
-crzip :: forall (c :: * -> Constraint) h f g (xs :: [k])
+crzip :: forall (c :: * -> Constraint) h f g (xs :: [Type])
       . (AllF c f xs, AllF c g xs) => (forall x. (c (f x), c (g x)) => f x -> g x -> h x)
      -> Rec f xs -> Rec g xs -> Rec h xs
-crzip f fs gs = runST $ do
+crzip = crzip' @Type @c
+crzip' :: forall (c :: * -> Constraint) h f g (xs :: [k])
+      . (AllF c f xs, AllF c g xs) => (forall x. (c (f x), c (g x)) => f x -> g x -> h x)
+     -> Rec f xs -> Rec g xs -> Rec h xs
+crzip' f fs gs = runST $ do
   fs' <- thaw fs
   gs' <- thaw gs
   freeze# =<< M.crzip @k @c f fs' gs'
 
 instance (KnownNat (Length xs), AllF Monoid f (xs :: [k])) => Monoid (Rec f xs) where
-  mempty = new @k @Monoid @xs mempty
-  mappend = crzip @k @Monoid mappend
+  mempty = new' @k @Monoid @xs mempty
+  mappend = crzip' @k @Monoid mappend
 
 
 
@@ -115,9 +120,19 @@ ctoVector f r = runST $ V.unsafeFreeze =<< M.ctoMVector @c f =<< thaw r
 replicate :: forall n f x. KnownNat n => f x -> Rec f (Replicate n x)
 replicate = Rec# . mapCast# @Any . V.replicate (fromInteger $ natVal (Proxy @n))
 
-new :: forall (c :: * -> Constraint) (xs :: [k]) f. (AllF c f xs, KnownNat (Length xs))
+-- | construct a record with values given by the constrained expression. Ex:
+--
+--  > new @Num @'[Int,Double,Word] @Sum (3 * 2)
+--
+--  O(n)
+new :: forall (c :: * -> Constraint) (xs :: [*]) f. (AllF c f xs, KnownNat (Length xs))
      => (forall x. c (f x) => f x) -> Rec f xs
-new x = runST $ do
+new = new' @Type @c
+-- | Create a recoord with values given by the constrained expression. Like @new@ but polykinded.
+-- O(n)
+new' :: forall (c :: * -> Constraint) (xs :: [k]) f. (AllF c f xs, KnownNat (Length xs))
+     => (forall x. c (f x) => f x) -> Rec f xs
+new' x = runST $ do
   xs <- M.new# @f @xs
   xs' <- M.crmap @c (\_ -> x) xs
   freeze# xs'
@@ -152,15 +167,15 @@ index :: forall n f xs. KnownNat n => Rec f xs -> f (xs !! n)
 index (Rec# v) = cast# $ v V.! intVal @n
 -- | Prepare a dynamically known index into a statically known record.
 -- O(n)
-checkIndex :: forall (xs :: [u]) f. KnownNat (Length xs) => Rec f xs -> Int -> MaybeSome (RIndex xs)
+checkIndex :: forall (xs :: [u]) f. KnownNat (Length xs) => Rec f xs -> Int -> MaybeSome (Index xs)
 checkIndex (Rec# (length -> n)) i | i < n = case someNatVal (fromIntegral i) of
-  Just (SomeNat (Proxy :: Proxy n)) -> JustSome $ RIndex# @u @xs @(xs !! n) i
+  Just (SomeNat (Proxy :: Proxy n)) -> JustSome $ Index# @u @xs @(xs !! n) i
   Nothing -> error "Impossible! Negative Vector.length in checkIndex"
 checkIndex _ _ = None
 
 -- | Prepare a dynamically known index.
 -- O(n)
-checkIndex' :: forall (xs :: [u]) f. Rec f xs -> Int -> MaybeSome (RIndex xs)
+checkIndex' :: forall (xs :: [u]) f. Rec f xs -> Int -> MaybeSome (Index xs)
 checkIndex' RNil _ = None
 checkIndex' ((_::f x) :& _) 0 = JustSome (RZ @u @x)
 checkIndex' (_ :& xs) n = case checkIndex' xs (n-1) of

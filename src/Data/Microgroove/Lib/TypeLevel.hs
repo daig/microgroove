@@ -6,6 +6,7 @@ import GHC.TypeLits as X (Nat, type (-), type (+), type (<=), KnownNat)
 import GHC.TypeLits (natVal)
 import GHC.Exts as X (Constraint,Any)
 import Data.Proxy as X (Proxy(..))
+import Data.Kind as X (Type)
 
 -- | Index into a type level list
 type family ((xs :: [u]) !! (n :: Nat)) where

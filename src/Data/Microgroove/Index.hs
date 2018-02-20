@@ -1,7 +1,14 @@
 {-# language MagicHash #-}
+{-# language FlexibleContexts #-}
 {-# language AllowAmbiguousTypes #-}
-module Data.Microgroove.Index (Index(Index#,RZ,RS), mkIndex) where
+module Data.Microgroove.Index (
+  -- * Prepared Indicies into a Record
+  Index(Index#,RZ,RS)
+  -- * Constructing Indicies
+  ,mkIndex
+  ,checkIndex, checkIndex') where
 import Data.Microgroove.Lib
+import GHC.TypeLits
 
 -- | A prepared index into a record, allowing fast access
 newtype Index (xs :: [u]) (x :: u) = Index# Int deriving Show
@@ -27,3 +34,16 @@ pattern RS i <- (upIndex -> RS' i) where
 -- O(1)
 mkIndex :: forall n xs . (KnownNat n, n <= Length xs - 1) => Index xs (xs !! n)
 mkIndex = Index# $ intVal @n
+
+-- | Prepare a dynamically known index into a statically known record.
+-- O(n) and better constants than @checkIndex'@
+checkIndex :: forall (xs :: [*]). KnownNat (Length xs) => Int -> MaybeSome (Index xs)
+checkIndex = checkIndex' @Type @xs
+
+-- | Prepare a dynamically known index into a statically known record. Like @checkIndex@ but polykinded
+-- O(n) and better constants than @checkIndex'@
+checkIndex' :: forall (xs :: [u]). KnownNat (Length xs) => Int -> MaybeSome (Index xs)
+checkIndex' i | i < (intVal @(Length xs)) = case someNatVal (fromIntegral i) of
+  Just (SomeNat (Proxy :: Proxy n)) -> JustSome $ Index# @u @xs @(xs !! n) i
+  Nothing -> error "Impossible! Negative Vector.length in checkIndex"
+             | otherwise = None

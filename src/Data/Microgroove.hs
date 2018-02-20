@@ -3,28 +3,45 @@
 {-# language UndecidableInstances #-}
 {-# language FlexibleContexts #-}
 {-# language AllowAmbiguousTypes #-}
-module Data.Microgroove
-  -- * Immutable heterogenious records
-  (Rec(Rec#,RNil,(:&))
-  -- * Mutable heterogenious records
-  ,MRec(..)
-  ,index, (!), checkIndex, checkIndex'
-  , new, new'
-  ,splitCons, rappend
-  ,rmap, crmap, rmapM, crmapM
-  ,rzip, crzip
-  ,toVector, ctoVector
-  ,foldMapF, cfoldMapF
-  ,fromVectorN, fromVector, replicate
+module Data.Microgroove (
+  -- * Immutable Heterogeneous Records
+   Rec(Rec#,RNil,(:&))
+  -- ** Mutable / Immutable Conversions
   ,thaw, thaw#, freeze, freeze#
+  -- ** Constructing Records
+  , new, new'
+  ,fromVectorN, fromVector, replicate
+  -- ** Modifying Records
   ,modify
-  ,subRecord
+  ,rmap, rmapM
+  -- *** Modification With Constraint
+  ,crmap, crmapM
+  -- ** Combining Records
+  ,rappend
+  ,rzip
+  -- *** Combining with Constraint
+  ,crzip
+  -- ** Deconstructing Records
+  ,splitCons
+  ,foldMapF 
+  ,toVector
+  -- *** Deconstructing with Constraint
+  ,cfoldMapF
+  ,ctoVector
+  -- ** Filtering Records
+  ,subRecord#
+  -- * Prepared Indicies into a Record
+  ,Index(Index#,RZ,RS)
+  -- ** Constructing Indicies
+  ,mkIndex, checkIndex, checkDynIndex
+  -- ** Indexing
+  ,index, (!)
   ,module X
   ) where
 import Prelude hiding (replicate)
 import Data.Microgroove.Lib
 import Data.Microgroove.Lib.TypeLevel as X
-import Data.Microgroove.Index as X
+import Data.Microgroove.Index
 import Data.Microgroove.Mutable (MRec(..))
 import qualified Data.Microgroove.Mutable as M
 
@@ -161,7 +178,7 @@ crzip' f fs gs = runST $ do
 instance Monoid (Rec f '[]) where
   mempty = RNil
   mappend _ _ = RNil
--- | initialize each field with @mempty@, and @mappend@ fields pairwise
+-- | @mappend@ fields pairwise
 instance (KnownNat (Length (x ': xs)), AllF Monoid f ((x ': xs) :: [k])) => Monoid (Rec f (x ': xs)) where
   mempty = new' @k @Monoid @(x ': xs) mempty
   mappend = crzip' @k @Monoid mappend
@@ -344,20 +361,13 @@ modify f r = runST $ do
 -- O(1)
 index :: forall n f xs. KnownNat n => Rec f xs -> f (xs !! n)
 index (Rec# v) = cast# $ v V.! intVal @n
--- | Prepare a dynamically known index into a statically known record.
--- O(n)
-checkIndex :: forall (xs :: [u]) f. KnownNat (Length xs) => Rec f xs -> Int -> MaybeSome (Index xs)
-checkIndex (Rec# (length -> n)) i | i < n = case someNatVal (fromIntegral i) of
-  Just (SomeNat (Proxy :: Proxy n)) -> JustSome $ Index# @u @xs @(xs !! n) i
-  Nothing -> error "Impossible! Negative Vector.length in checkIndex"
-checkIndex _ _ = None
 
 -- | Prepare a dynamically known index.
 -- O(n)
-checkIndex' :: forall (xs :: [u]) f. Rec f xs -> Int -> MaybeSome (Index xs)
-checkIndex' RNil _ = None
-checkIndex' ((_::f x) :& _) 0 = JustSome (RZ @u @x)
-checkIndex' (_ :& xs) n = case checkIndex' xs (n-1) of
+checkDynIndex :: forall (xs :: [u]) f. Rec f xs -> Int -> MaybeSome (Index xs)
+checkDynIndex RNil _ = None
+checkDynIndex ((_::f x) :& _) 0 = JustSome (RZ @u @x)
+checkDynIndex (_ :& xs) n = case checkDynIndex xs (n-1) of
   None -> None
   JustSome i -> JustSome $ RS i
 
@@ -366,9 +376,10 @@ checkIndex' (_ :& xs) n = case checkIndex' xs (n-1) of
 --  > subRecord @'[0,2] ([1] :& "a" :& ["wow","what"] :& [[1,2,3], [4,5]] :& RNil)
 --  > = [1] :& ["wow","what"] :& RNil
 --
---  The index list must be in ascending order. O(m)
-subRecord :: forall ns f xs. (KnownNat (Length ns), KnownNats ns)
-          => Rec f xs -> Rec f (SubList ns xs)
-subRecord (Rec# v) = Rec# $ v `V.backpermute` fromListN n ns
+--  @ns@ must be in ascending order, but this is not checked.
+--  O(m)
+subRecord# :: forall ns f xs. (KnownNat (Length ns), KnownNats ns)
+          => Rec f xs -> Rec f (SubList# ns xs)
+subRecord# (Rec# v) = Rec# $ v `V.backpermute` fromListN n ns
   where ns = intList @ns
         n = intVal @(Length ns)

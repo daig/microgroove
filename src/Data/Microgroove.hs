@@ -4,7 +4,10 @@
 {-# language FlexibleContexts #-}
 {-# language AllowAmbiguousTypes #-}
 module Data.Microgroove
-  (Rec(Rec#,RNil,(:&)), MRec(..)
+  -- * Immutable heterogenious records
+  (Rec(Rec#,RNil,(:&))
+  -- * Mutable heterogenious records
+  ,MRec(..)
   ,index, (!), checkIndex, checkIndex'
   , new, new'
   ,splitCons, rappend
@@ -15,21 +18,65 @@ module Data.Microgroove
   ,fromVectorN, fromVector, replicate
   ,thaw, thaw#, freeze, freeze#
   ,modify
+  ,subRecord
   ,module X
   ) where
 import Prelude hiding (replicate)
 import Data.Microgroove.Lib
 import Data.Microgroove.Lib.TypeLevel as X
 import Data.Microgroove.Index as X
-import Data.Microgroove.Type
 import Data.Microgroove.Mutable (MRec(..))
 import qualified Data.Microgroove.Mutable as M
 
 import qualified Data.Vector as V
+import Data.Vector as X (Vector)
 import Control.Monad.ST
 import Control.Monad.Primitive (PrimMonad(..))
 import GHC.TypeLits
 import GHC.Float
+import GHC.Exts (IsList(..))
+import Data.Monoid (Endo(..))
+
+-- | A heterogeneous record represented by an untyped vector
+newtype Rec (f :: u -> *) (us :: [u]) = Rec# (V.Vector Any)
+
+-- A dynamically shaped record, with elements satisfying some constraint
+{-data SomeRec c f = forall us. AllF c f us => SomeRec (Rec f us)-}
+
+instance Show (Rec f '[]) where
+  show RNil = "[]"
+  show _ = error "Impossible! RNil inexhaustive in show @(Rec f '[])"
+instance (Show (f x), Show (Rec f xs)) => Show (Rec f (x ': xs)) where
+  show (a :& xs) = show a ++ " :& " ++ show xs
+  show _ = error "Impossible! RCons inexhaustive in show @(Rec f (x ': xs))"
+
+instance Eq (Rec f '[]) where RNil == RNil = True
+instance Ord (Rec f '[]) where compare RNil RNil = EQ
+
+-- | An intermediate type to deconstruct an @Rec@ into head normal form
+data Rec' (f :: u -> *) (us :: [u]) where
+  RNil' :: Rec' f '[]
+  RCons' :: f u -> Rec f us -> Rec' f (u ': us)
+
+
+-- | Convert a Rec to head normal form,
+-- refining the type to distinguish empty from nonempty records
+upRec :: Rec f us -> Rec' f us
+upRec (Rec# v) | V.null v = cast# RNil'
+               | otherwise = cast# $ RCons' (cast# $ V.head v) (Rec# $ V.tail v)
+
+-- | Construct or pattern match an empty record, refining its type
+pattern RNil :: () => (us ~ '[]) => Rec f us
+pattern RNil <- (upRec -> RNil') where
+  RNil = Rec# V.empty
+
+-- | Construct or pattern match a nonempty record, refining its type.
+-- Matching is O(1), prepending is O(n)
+pattern (:&) :: () => (us' ~ (u ': us)) => f u -> Rec f us -> Rec f us'
+pattern (:&) x xs <- (upRec -> RCons' x xs) where
+  x :& (Rec# xs) = Rec# (V.cons (cast# x) xs)
+{-# complete RNil, (:&) #-}
+infixr 5 :&
 
 -- | Copy a record into a fresh mutable record.
 -- O(n)
@@ -111,12 +158,23 @@ crzip' f fs gs = runST $ do
   gs' <- thaw gs
   freeze# =<< M.crzip @k @c f fs' gs'
 
+instance Monoid (Rec f '[]) where
+  mempty = RNil
+  mappend _ _ = RNil
 -- | initialize each field with @mempty@, and @mappend@ fields pairwise
-instance (KnownNat (Length xs), AllF Monoid f (xs :: [k])) => Monoid (Rec f xs) where
-  mempty = new' @k @Monoid @xs mempty
+instance (KnownNat (Length (x ': xs)), AllF Monoid f ((x ': xs) :: [k])) => Monoid (Rec f (x ': xs)) where
+  mempty = new' @k @Monoid @(x ': xs) mempty
   mappend = crzip' @k @Monoid mappend
 
-instance (KnownNat (Length xs), AllF Num f (xs :: [k])) => Num (Rec f xs) where
+instance Num (Rec f '[]) where
+  fromInteger _ = RNil
+  _ + _ = RNil
+  _ - _ = RNil
+  _ * _ = RNil
+  negate x = x
+  abs x = x
+  signum x = x
+instance (KnownNat (Length (x ': xs)), AllF Num f ((x ': xs) :: [k])) => Num (Rec f (x ': xs)) where
   fromInteger n = new' @k @Num (fromInteger n)
   (+) = crzip' @k @Num (+)
   (-) = crzip' @k @Num (-)
@@ -125,12 +183,38 @@ instance (KnownNat (Length xs), AllF Num f (xs :: [k])) => Num (Rec f xs) where
   abs = crmap @Num abs
   signum = crmap @Num signum
 
-instance (KnownNat (Length xs), AllF Num f xs, AllF Fractional f (xs :: [k])) => Fractional (Rec f xs) where
+instance Fractional (Rec f '[]) where
+  fromRational _ = RNil
+  _ / _ = RNil
+  recip x = x
+instance (KnownNat (Length (x ': xs)), AllF Num f (x ': xs), AllF Fractional f ((x ': xs) :: [k])) => Fractional (Rec f (x ': xs)) where
   fromRational n = new' @k @Fractional (fromRational n)
   (/) = crzip' @k @Fractional (/)
   recip = crmap @Fractional recip
 
-instance (KnownNat (Length xs), Fractional (Rec f (xs :: [k])), AllF Floating f xs) => Floating (Rec f xs) where
+instance Floating (Rec f '[]) where
+  pi = RNil
+  exp x = x
+  log x = x
+  sqrt x = x
+  sin x = x
+  cos x = x
+  tan x = x
+  asin x = x
+  acos x = x
+  atan x = x
+  sinh x = x
+  cosh x = x
+  tanh x = x
+  asinh x = x
+  acosh x = x
+  atanh x = x
+  log1p x = x
+  expm1 x = x
+  log1pexp x = x
+  log1mexp x = x
+
+instance (KnownNat (Length (x ': xs)), Fractional (Rec f ((x ': xs) :: [k])), AllF Floating f (x ': xs)) => Floating (Rec f (x ': xs)) where
   pi = new' @k @Floating pi
   exp = crmap @Floating exp
   log = crmap @Floating log
@@ -152,6 +236,28 @@ instance (KnownNat (Length xs), Fractional (Rec f (xs :: [k])), AllF Floating f 
   log1pexp = crmap @Floating log1pexp
   log1mexp = crmap @Floating log1mexp
 
+instance IsList (Rec f '[]) where
+  type Item (Rec f '[]) = Any
+  fromList = \case
+    [] -> RNil
+    _ -> error "fromList: nonempty list literal"
+  fromListN 0 [] = RNil
+  fromListN _ _ = error "fromListN: nonempty list literal"
+  toList _ = []
+instance KnownNat (Length (x ': xs)) => IsList (Rec f (x ': xs)) where
+  type Item (Rec f (x ': xs)) = Any
+  fromListN n xs =
+    let n' = intVal @(Length (x ': xs))
+    in if n == n'
+     then Rec# $ fromListN n xs
+     else error $ "fromListN: expected length " ++ show n' ++ " but actually " ++ show n
+  fromList (fromList -> xs) =
+    let n' = intVal @(Length (x ': xs))
+        n = V.length xs
+    in if n == n'
+     then Rec# xs
+     else error $ "fromListN: expected length " ++ show n' ++ " but actually " ++ show n
+  toList = (`appEndo` []) . foldMapF (\x -> Endo (\xs -> cast# @Any x : xs))
 
 
 
@@ -254,3 +360,15 @@ checkIndex' ((_::f x) :& _) 0 = JustSome (RZ @u @x)
 checkIndex' (_ :& xs) n = case checkIndex' xs (n-1) of
   None -> None
   JustSome i -> JustSome $ RS i
+
+-- | Choose a satically known ordered subset of the fields in a record. Ex:
+--
+--  > subRecord @'[0,2] ([1] :& "a" :& ["wow","what"] :& [[1,2,3], [4,5]] :& RNil)
+--  > = [1] :& ["wow","what"] :& RNil
+--
+--  The index list must be in ascending order. O(m)
+subRecord :: forall ns f xs. (KnownNat (Length ns), KnownNats ns)
+          => Rec f xs -> Rec f (SubList ns xs)
+subRecord (Rec# v) = Rec# $ v `V.backpermute` fromListN n ns
+  where ns = intList @ns
+        n = intVal @(Length ns)

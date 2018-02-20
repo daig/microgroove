@@ -11,12 +11,16 @@ module Data.Microgroove.Mutable
   ,rzip, crzip
   ,toMVector, ctoMVector
   ,modify, index
+  ,subRecord#
   ,module X
   ) where
 import Data.Microgroove.Lib
+import Data.Microgroove.Lib.Vector
 import qualified Data.Vector.Mutable as VM
 import Control.Monad.Primitive as X (PrimMonad(..))
 import Data.Microgroove.Mutable.Type as X
+import GHC.Exts as X (RealWorld)
+
 
 
 
@@ -130,3 +134,9 @@ modify :: forall n m f xs y. (KnownNat n, PrimMonad m)
        => (f (xs !! n) -> f y) -> MRec (PrimState m) f xs
        -> m (MRec (PrimState m) f (SetAt n xs y))
 modify f rm@(MRec# vm) = cast# rm <$ VM.modify vm (cast# @Any . f . cast#) (intVal @n)
+
+-- | Choose a satically known ordered subset of the fields in a record.
+-- The list must be in ascending order. O(n)
+subRecord# :: forall ns m f xs. (KnownNat (Length ns), KnownNats ns,PrimMonad m)
+          => MRec (PrimState m) f xs -> m (MRec (PrimState m) f (SubList ns xs))
+subRecord# (MRec# vm) = MRec# <$> subVector# (intVal @(Length ns)) (intList @ns) vm

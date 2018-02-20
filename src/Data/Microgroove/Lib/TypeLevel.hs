@@ -13,10 +13,29 @@ type family ((xs :: [u]) !! (n :: Nat)) where
   (x ': _) !! 0 = x
   (_ ': xs) !! n = xs !! (n-1)
 
+type family Drop (n :: Nat) (xs :: [u]) where
+  Drop 0 xs = xs
+  Drop n (x ': xs) = Drop (n-1) xs
+
+class KnownNats ns where intList :: [Int]
+instance KnownNats '[] where intList = []
+instance (KnownNat n,KnownNats ns) => KnownNats (n ': ns) where intList = intVal @n : intList @ns
+
+type family SubList (ns :: [Nat]) (xs :: [u]) :: [u] where
+  SubList ns xs = SubList' ns xs 0
+
+type family SubList' (ns :: [Nat]) (xs :: [u]) (acc :: Nat) :: [u] where
+  SubList' '[] xs n = '[]
+  SubList' (n ': ns) (x ': xs) n = x ': SubList' ns xs (n+1)
+  SubList' ns (x ': xs) n = SubList' ns xs (n+1)
+
 type family Length (xs :: [u]) :: Nat where
   Length '[] = 0
   Length (_ ': xs) = 1 + Length xs
 
+type family All (c :: u -> Constraint) (xs :: [u]) :: Constraint where
+  All c '[] = ()
+  All c (x ': xs) = (c x, All c xs)
 -- | @AllF c f xs@ ensures that constraint @c (f x)@ holds for all @x@ in @xs@
 type family AllF (c :: * -> Constraint) (f :: u -> *) (xs :: [u]) :: Constraint where
   AllF c f '[] = ()
@@ -42,6 +61,7 @@ type family Replicate (n :: Nat) (x :: u) :: [u] where
 type family SetAt n xs x where
   SetAt 0 (_ ': xs) x = x ': xs
   SetAt n (x ': xs) y = x ': SetAt (n-1) xs y
+
 
 intVal :: forall n. KnownNat n => Int
 intVal = fromInteger (natVal (Proxy @n))
